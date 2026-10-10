@@ -23,5 +23,5 @@ O ComércioOS foi definido como uma plataforma SaaS para centralizar essas opera
 - Node.js
 - Express
 
-### **Banco de Dados **
+### **Banco de Dados**
 - MySQL
