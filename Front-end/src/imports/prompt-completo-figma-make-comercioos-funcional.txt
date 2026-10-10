@@ -1,0 +1,843 @@
+Crie do zero um protótipo funcional, navegável, responsivo e editável no Figma Make para o sistema web ComércioOS.
+
+Não crie apenas imagens ou telas estáticas. Gere frames editáveis, componentes separados, textos editáveis, botões funcionais, formulários, modais, tabelas, filtros, navegação entre telas e estados de sucesso, erro, carregamento, vazio e acesso não autorizado.
+
+O resultado deve ser um protótipo navegável para demonstração acadêmica de uma plataforma SaaS de gestão de pequenos comércios.
+
+==================================================
+1. CONTEXTO DO SISTEMA
+==================================================
+
+O ComércioOS é uma plataforma SaaS para pequenos comércios. A aplicação deve centralizar:
+
+- Apresentação do produto;
+- Cadastro do estabelecimento;
+- Onboarding;
+- Login;
+- Recuperação de senha;
+- Usuários e equipe;
+- Clientes;
+- Produtos;
+- Estoque;
+- Vendas no PDV;
+- Pagamentos;
+- Código de barras;
+- Painel gerencial;
+- Centro Fiscal demonstrativo;
+- Relatórios;
+- Configurações;
+- Notificações;
+- Suporte.
+
+Utilize textos em português do Brasil e dados fictícios.
+
+O comércio demonstrativo deve ser:
+
+- Nome fantasia: Mercado & Mercearia Silva;
+- Razão social: Mercado Silva Comércio de Alimentos Ltda.;
+- CNPJ demonstrativo: 12.345.678/0001-00;
+- Segmento: Mercado e mercearia;
+- Plano: Plano Demonstrativo;
+- Tenant: Mercado Silva — Loja Principal.
+
+Nunca utilize dados pessoais reais. CPF e CNPJ devem aparecer mascarados quando exibidos em telas internas.
+
+==================================================
+2. IDENTIDADE VISUAL
+==================================================
+
+Crie uma identidade visual moderna, profissional e acolhedora.
+
+Use esta paleta:
+
+- Verde profundo para sidebar e cabeçalho: #1F2926;
+- Verde para sucesso e indicadores positivos: #4F8B69;
+- Terracota para ações primárias: #E8753D;
+- Creme para áreas públicas: #FFF9F4;
+- Cinza claro para áreas internas: #F6F7F8;
+- Branco para cards, tabelas e modais;
+- Vermelho suave para erros e estoque crítico: #C65B42;
+- Azul discreto para informações fiscais: #4D7CA8.
+
+Use Space Grotesk em títulos e números de destaque. Use DM Sans em textos, campos, tabelas e botões.
+
+Utilize:
+
+- Sidebar fixa nas áreas internas;
+- Cards com cantos arredondados;
+- Bordas suaves;
+- Sombras discretas;
+- Badges de status;
+- Tabelas limpas;
+- Botões com estados hover, active, disabled e loading;
+- Ícones consistentes;
+- Contraste adequado;
+- Layout responsivo para desktop, tablet e mobile.
+
+Não utilize excesso de elementos decorativos. Priorize clareza, organização e rapidez no atendimento do PDV.
+
+==================================================
+3. PERFIS E CONTROLE DE ACESSO
+==================================================
+
+Utilize somente dois perfis:
+
+A) Administrador/Gerente
+
+O Administrador/Gerente possui acesso total ao próprio comércio e pode acessar:
+
+- Painel;
+- Vendas/PDV;
+- Clientes;
+- Produtos;
+- Estoque;
+- Centro Fiscal;
+- Relatórios;
+- Usuários e Equipe;
+- Configurações;
+- Notificações;
+- Suporte.
+
+B) Operador/Funcionário
+
+Operador e Funcionário representam o mesmo perfil. Não crie dois perfis separados.
+
+O Operador/Funcionário pode acessar somente:
+
+- Vendas/PDV;
+- Clientes;
+- Consulta de Estoque e Produtos;
+- Notificações operacionais;
+- Perfil;
+- Sair.
+
+O Operador/Funcionário não pode acessar:
+
+- Painel gerencial completo;
+- Centro Fiscal;
+- Relatórios administrativos;
+- Usuários e Equipe;
+- Configurações administrativas;
+- Cadastro de produtos;
+- Edição de produtos;
+- Alteração de preços;
+- Entrada de estoque;
+- Baixa manual de estoque;
+- Ajuste de estoque;
+- Indicadores financeiros estratégicos.
+
+A sidebar deve mudar automaticamente conforme o perfil.
+
+Se o Operador tentar acessar diretamente uma rota administrativa, exibir uma tela de Acesso não autorizado com botão Voltar para Vendas/PDV.
+
+Não crie cargos adicionais como Estoquista, Gerente de Operações, Supervisor ou Operador Sênior.
+
+==================================================
+4. ESTRUTURA DE NAVEGAÇÃO
+==================================================
+
+Criar a seguinte estrutura de telas:
+
+01. Home pública;
+02. Cadastro do estabelecimento;
+03. Onboarding;
+04. Login;
+05. Recuperação de senha;
+06. Painel do Administrador;
+07. Clientes;
+08. Estoque;
+09. Produtos;
+10. Vendas/PDV;
+11. Centro Fiscal;
+12. Relatórios;
+13. Usuários e Equipe;
+14. Configurações;
+15. Notificações;
+16. Acesso não autorizado;
+17. Confirmação de saída.
+
+Conecte as telas com os seguintes fluxos:
+
+Home → Cadastro → Onboarding → Login.
+
+Home → Login.
+
+Login Administrador → Painel.
+
+Login Operador → Vendas/PDV.
+
+Login → Esqueci minha senha → Solicitar recuperação → Verifique seu e-mail → Redefinir senha → Sucesso → Login.
+
+Administrador → Painel → todos os módulos autorizados.
+
+Operador → Vendas/PDV, Clientes e Estoque somente consulta.
+
+Todos os perfis → Sair → Confirmação de saída → Login.
+
+==================================================
+5. HOME PÚBLICA
+==================================================
+
+Crie uma Home pública com:
+
+- Logo ComércioOS;
+- Menu Início;
+- Funcionalidades;
+- Sobre;
+- Como funciona;
+- FAQ;
+- Contato;
+- Botão Entrar;
+- Botão Começar agora.
+
+Hero principal:
+
+Título: A gestão do seu comércio, simples e no controle.
+
+Texto: Centralize vendas, clientes, estoque e resultados em uma única plataforma.
+
+Botões:
+
+- Começar gratuitamente;
+- Conhecer a plataforma.
+
+Criar seções para:
+
+- Benefícios;
+- Agilidade no atendimento;
+- Controle de estoque;
+- Clareza dos dados;
+- Centralização da gestão;
+- Funcionalidades;
+- Sobre o ComércioOS;
+- Objetivo do produto;
+- Como funciona;
+- Prévia do painel;
+- Planos demonstrativos;
+- Perguntas frequentes;
+- Contato;
+- Rodapé institucional.
+
+Interações:
+
+- Entrar abre Login;
+- Começar agora abre Cadastro;
+- Links do menu levam às seções;
+- FAQ abre e fecha respostas;
+- Formulário de contato valida campos;
+- Envio do contato mostra mensagem de sucesso;
+- Erro de envio mostra mensagem de erro.
+
+Não simule cobrança real.
+
+==================================================
+6. CADASTRO DO ESTABELECIMENTO
+==================================================
+
+Crie um cadastro em etapas com indicador de progresso.
+
+Etapa 1 — Dados do comércio:
+
+- CNPJ ou CPF;
+- Razão social;
+- Nome fantasia;
+- Inscrição estadual opcional;
+- Segmento;
+- CEP;
+- Endereço;
+- Número;
+- Cidade;
+- Estado.
+
+Etapa 2 — Dados do Administrador:
+
+- Nome completo;
+- Telefone;
+- E-mail;
+- Senha;
+- Confirmar senha.
+
+Etapa 3 — Termos:
+
+- Checkbox Termos de Uso;
+- Checkbox Política de Privacidade;
+- Botão Criar meu comércio.
+
+Criar validações para:
+
+- Campos obrigatórios;
+- E-mail inválido;
+- Senhas diferentes;
+- Senha fraca;
+- CNPJ/CPF inválido;
+- Termos não aceitos.
+
+Após concluir, mostrar:
+
+Comércio criado com sucesso.
+
+Botão: Começar configuração.
+
+Navegar para Onboarding.
+
+==================================================
+7. ONBOARDING
+==================================================
+
+Criar uma experiência de configuração inicial com progresso.
+
+Etapas:
+
+1. Confirmar dados do comércio;
+2. Confirmar Administrador;
+3. Cadastrar primeiro produto;
+4. Configurar estoque inicial;
+5. Conhecer o PDV;
+6. Concluir configuração.
+
+Permitir:
+
+- Avançar;
+- Voltar;
+- Pular etapa quando permitido;
+- Salvar progresso;
+- Retomar depois.
+
+Ao concluir, oferecer:
+
+- Ir para o Painel;
+- Abrir o PDV.
+
+==================================================
+8. LOGIN
+==================================================
+
+Criar tela de Login com:
+
+- Logo;
+- E-mail;
+- Senha;
+- Mostrar/ocultar senha;
+- Checkbox Lembrar deste computador;
+- Botão Entrar no sistema;
+- Link Esqueci minha senha?;
+- Link Criar um comércio;
+- Link Voltar para Home.
+
+Criar botões demonstrativos:
+
+- Entrar como Administrador/Gerente;
+- Entrar como Operador/Funcionário.
+
+Ao clicar em Administrador, entrar com Letícia Souza e abrir Painel.
+
+Ao clicar em Operador, entrar com Carlos Oliveira e abrir Vendas/PDV.
+
+Não permitir trocar o perfil depois do login.
+
+Criar estados de:
+
+- Campos vazios;
+- E-mail inválido;
+- Senha incorreta;
+- Usuário inativo;
+- Carregando;
+- Sessão expirada;
+- Acesso negado.
+
+==================================================
+9. RECUPERAÇÃO DE SENHA
+==================================================
+
+Criar três telas e conectá-las.
+
+Tela A — Esqueci minha senha:
+
+- E-mail;
+- Enviar link de recuperação;
+- Voltar para Login.
+
+Tela B — Verifique seu e-mail:
+
+- Mensagem genérica de segurança;
+- E-mail mascarado;
+- Reenviar link;
+- Contador de reenvio;
+- Voltar para Login.
+
+Mensagem:
+
+Se o e-mail estiver cadastrado, enviaremos as instruções para recuperação de acesso.
+
+Não informar se o e-mail existe.
+
+Tela C — Redefinir senha:
+
+- Nova senha;
+- Confirmar nova senha;
+- Indicador de força;
+- Requisitos da senha;
+- Salvar nova senha.
+
+Tela D — Sucesso:
+
+Senha redefinida com sucesso.
+
+Botão Ir para Login.
+
+Criar estados de link expirado, link inválido, link utilizado, senhas diferentes, senha fraca e falha de envio.
+
+==================================================
+10. LAYOUT AUTENTICADO
+==================================================
+
+Criar layout com:
+
+- Sidebar;
+- Nome do comércio;
+- Tenant atual;
+- Avatar;
+- Nome do usuário;
+- Badge do perfil;
+- Notificações;
+- Ajuda;
+- Sair.
+
+Sidebar do Administrador:
+
+- Painel;
+- Vendas/PDV;
+- Clientes;
+- Estoque;
+- Centro Fiscal;
+- Relatórios;
+- Usuários e Equipe;
+- Configurações;
+- Suporte;
+- Sair.
+
+Sidebar do Operador:
+
+- Vendas/PDV;
+- Clientes;
+- Estoque — consulta;
+- Notificações;
+- Perfil;
+- Sair.
+
+==================================================
+11. PAINEL DO ADMINISTRADOR
+==================================================
+
+Disponível somente para Administrador/Gerente.
+
+Exibir:
+
+- Saudação;
+- Comércio atual;
+- Filtro por período;
+- Receita total;
+- Lucro líquido;
+- Gastos totais;
+- Ticket médio;
+- Variação percentual;
+- Gráfico de receitas e despesas;
+- Alertas de estoque crítico;
+- Vendas recentes;
+- Atividades recentes.
+
+Ações rápidas:
+
+- Nova venda;
+- Novo cliente;
+- Novo produto;
+- Consultar estoque;
+- Abrir relatórios.
+
+Usar valores fictícios.
+
+==================================================
+12. CLIENTES
+==================================================
+
+Disponível para Administrador/Gerente e Operador/Funcionário.
+
+Criar listagem com:
+
+- Botão Novo cliente;
+- Busca por nome, CPF, e-mail ou telefone;
+- Filtros por status;
+- Nome;
+- CPF mascarado;
+- Telefone;
+- E-mail;
+- Total gasto;
+- Última compra;
+- Status;
+- Ações;
+- Paginação.
+
+Permitir:
+
+- Novo cliente;
+- Editar cliente;
+- Ativar;
+- Desativar;
+- Visualizar ficha;
+- Ver histórico de compras.
+
+Campos:
+
+- Nome;
+- CPF;
+- Telefone;
+- E-mail;
+- Status.
+
+Criar estados de lista vazia e busca sem resultado.
+
+==================================================
+13. ESTOQUE E PRODUTOS
+==================================================
+
+Criar uma tela de estoque com duas experiências.
+
+Para o Operador:
+
+- Buscar produto;
+- Filtrar categoria e status;
+- Consultar nome;
+- Consultar SKU;
+- Consultar código de barras;
+- Consultar preço;
+- Consultar quantidade;
+- Ver detalhes.
+
+Não exibir ao Operador botões de cadastro, edição, preço, entrada, baixa ou ajuste.
+
+Para o Administrador:
+
+- Novo produto;
+- Editar produto;
+- Alterar preço;
+- Configurar estoque mínimo;
+- Registrar entrada;
+- Registrar baixa com motivo;
+- Ajustar estoque com justificativa;
+- Ver histórico de movimentações.
+
+Exibir badges Em estoque, Estoque baixo, Sem estoque e Inativo.
+
+Cadastro de produto:
+
+- Nome;
+- Descrição;
+- SKU;
+- EAN/GTIN opcional;
+- Categoria;
+- Preço;
+- Quantidade inicial;
+- Estoque mínimo;
+- Status.
+
+Regras:
+
+- Código de barras opcional;
+- Código de barras único por comércio;
+- Produto abaixo do mínimo gera alerta;
+- Operador não altera produtos ou estoque.
+
+==================================================
+14. VENDAS E PDV
+==================================================
+
+Disponível para os dois perfis.
+
+Criar uma tela de PDV rápida com:
+
+- Busca de produto;
+- Catálogo;
+- Carrinho;
+- Cliente;
+- Desconto;
+- Subtotal;
+- Total;
+- Pagamento;
+- Troco;
+- Finalização.
+
+Buscar por nome, SKU ou código de barras digitado.
+
+Adicionar botão Escanear produto.
+
+Ao clicar, abrir modal com:
+
+- Área simulada de câmera;
+- Mensagem Aponte para o código de barras;
+- Simular leitura;
+- Usar leitor USB/Bluetooth;
+- Buscar manualmente;
+- Fechar.
+
+Criar estados de câmera preparando, procurando, identificado, não encontrado, sem permissão, leitor indisponível, erro e nova tentativa.
+
+Quando o produto for localizado:
+
+- Adicionar ao carrinho;
+- Exibir nome, preço e estoque;
+- Incrementar quantidade em nova leitura.
+
+Carrinho:
+
+- Alterar quantidade;
+- Remover item;
+- Associar cliente;
+- Aplicar desconto;
+- Ver subtotal;
+- Ver total.
+
+Pagamento:
+
+- Dinheiro;
+- Crédito;
+- Débito;
+- PIX.
+
+No dinheiro, exibir Valor recebido e calcular Troco.
+
+Ao finalizar:
+
+- Validar estoque;
+- Impedir carrinho vazio;
+- Impedir pagamento insuficiente;
+- Exigir forma de pagamento;
+- Mostrar loading;
+- Mostrar venda finalizada;
+- Exibir identificador demonstrativo;
+- Exibir total, pagamento e troco;
+- Atualizar visualmente o estoque;
+- Permitir nova venda;
+- Permitir comprovante demonstrativo.
+
+Criar estados de estoque insuficiente, produto inativo, produto não encontrado, falha de pagamento e erro de rede.
+
+==================================================
+15. CENTRO FISCAL
+==================================================
+
+Disponível somente para Administrador/Gerente.
+
+Exibir selo:
+
+Dados demonstrativos — integração fiscal futura.
+
+Mostrar:
+
+- Competência;
+- Receita;
+- Gastos;
+- Impostos;
+- DAS demonstrativo;
+- Data de vencimento;
+- Status;
+- Documentos fiscais;
+- Filtro por período;
+- Exportar relatório fiscal.
+
+Não afirmar que existe emissão fiscal real.
+
+==================================================
+16. RELATÓRIOS
+==================================================
+
+Disponível somente para Administrador/Gerente.
+
+Criar relatórios de:
+
+- Vendas;
+- Clientes;
+- Produtos;
+- Estoque;
+- Movimentações;
+- Fluxo de caixa;
+- Fiscal.
+
+Filtros:
+
+- Hoje;
+- Últimos 7 dias;
+- Este mês;
+- Trimestre;
+- Período personalizado.
+
+Botões:
+
+- Visualizar;
+- Exportar PDF demonstrativo;
+- Exportar planilha demonstrativa;
+- Histórico.
+
+==================================================
+17. USUÁRIOS E EQUIPE
+==================================================
+
+Disponível somente para Administrador/Gerente.
+
+Mostrar:
+
+- Nome;
+- E-mail;
+- Perfil;
+- Status;
+- Última atividade;
+- Data de cadastro;
+- Busca;
+- Filtros.
+
+Novo usuário com:
+
+- Nome;
+- E-mail;
+- Telefone;
+- Perfil Administrador/Gerente ou Operador/Funcionário;
+- Status.
+
+Permitir editar, ativar, desativar e consultar atividade.
+
+Não permitir remover o último Administrador ativo do comércio.
+
+==================================================
+18. CONFIGURAÇÕES E NOTIFICAÇÕES
+==================================================
+
+Configurações somente para Administrador/Gerente.
+
+Criar abas:
+
+- Dados do comércio;
+- Perfil do Administrador;
+- Preferências do PDV;
+- Estoque;
+- Notificações;
+- Integrações demonstrativas.
+
+As integrações devem aparecer como Demonstrativo, Não configurado ou Futuro.
+
+Não simular cobrança real, SEFAZ, NFC-e, certificado digital, TEF, máquinas de cartão ou WhatsApp real.
+
+Notificações do Administrador:
+
+- Estoque crítico;
+- Venda concluída;
+- Falha de pagamento;
+- Documento demonstrativo;
+- DAS demonstrativo;
+- Usuário alterado;
+- Recuperação de senha.
+
+Notificações do Operador:
+
+- Venda concluída;
+- Produto sem estoque;
+- Estoque baixo;
+- Falha de pagamento;
+- Código não encontrado.
+
+Permitir marcar como lida, marcar todas como lidas, filtrar e abrir tela relacionada.
+
+==================================================
+19. ACESSO NÃO AUTORIZADO
+==================================================
+
+Criar tela específica com:
+
+Título: Acesso não autorizado.
+
+Texto: Seu perfil não possui permissão para acessar esta área.
+
+Botão: Voltar para Vendas/PDV.
+
+Usar essa tela sempre que o Operador tentar acessar uma área administrativa.
+
+==================================================
+20. REGRAS DE INTERAÇÃO
+==================================================
+
+Implemente estas regras:
+
+- Todo botão principal deve navegar ou executar uma ação simulada;
+- Todo formulário deve ter validação;
+- Toda ação de salvar deve exibir loading e sucesso ou erro;
+- Operações destrutivas exigem confirmação;
+- Listas vazias exibem orientação;
+- Buscas sem resultado exibem mensagem clara;
+- Erros exibem opção Tentar novamente;
+- O menu muda conforme o perfil;
+- O Operador não visualiza módulos administrativos;
+- O Administrador acessa todos os módulos;
+- O tenant Mercado Silva permanece durante a sessão;
+- Os dados são fictícios;
+- CPF e CNPJ aparecem mascarados;
+- Código de barras é opcional no produto;
+- Busca manual continua disponível no PDV;
+- Venda verifica estoque antes da conclusão;
+- Estoque é atualizado após venda concluída;
+- Estorno exige motivo;
+- Recuperação não revela se o e-mail está cadastrado;
+- Link de recuperação é temporário e de uso único;
+- Sair exige confirmação e volta ao Login.
+
+==================================================
+21. FLUXOS OBRIGATÓRIOS
+==================================================
+
+Fluxo público:
+
+Home → Cadastro → Onboarding → Login.
+
+Fluxo Administrador:
+
+Login Administrador → Painel → Clientes → Produtos → Estoque → PDV → Centro Fiscal → Relatórios → Usuários → Configurações → Sair.
+
+Fluxo Operador:
+
+Login Operador → Vendas/PDV → Buscar produto → Escanear ou digitar código → Carrinho → Cliente → Pagamento → Finalizar venda.
+
+Fluxo alternativo do Operador:
+
+Operador → Clientes → Novo cliente → Salvar → Voltar ao PDV.
+
+Operador → Estoque → Consultar produto → Detalhes → Voltar ao PDV.
+
+Fluxo de recuperação:
+
+Login → Esqueci minha senha → E-mail → Verifique seu e-mail → Redefinir senha → Sucesso → Login.
+
+==================================================
+22. CRITÉRIOS DE ENTREGA
+==================================================
+
+Entregue um protótipo com:
+
+- Todas as telas acima;
+- Frames editáveis;
+- Componentes separados;
+- Textos editáveis;
+- Navegação conectada;
+- Menus diferentes por perfil;
+- Formulários funcionais em modo protótipo;
+- Modais;
+- Toasts;
+- Loading;
+- Estados vazios;
+- Erros;
+- Acesso não autorizado;
+- Fluxos de login e recuperação de senha;
+- Fluxo de venda completo;
+- Separação rigorosa entre Administrador/Gerente e Operador/Funcionário;
+- Responsividade;
+- Português do Brasil;
+- Dados fictícios;
+- Identidade visual consistente.
+
+Não entregue telas soltas. Conecte os fluxos no modo Prototype do Figma. O resultado deve parecer um sistema SaaS real, organizado e pronto para uma apresentação acadêmica.
