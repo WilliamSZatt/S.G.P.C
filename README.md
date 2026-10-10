@@ -4,7 +4,6 @@
 > **Status do Projeto:** 🚧 Em Desenvolvimento
 
 > **Instituição:** Uniftec - Bento Gonçalves, RS
-
 > **Curso:** Análise e Desenvolvimento de Sistemas
 
 ## 📌 Sobre o Projeto
