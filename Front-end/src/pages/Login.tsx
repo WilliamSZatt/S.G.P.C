@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Eye, EyeOff, ArrowLeft, Mail, Lock } from '../components/Icons';
+import axios from 'axios';
 
 type LoginState = 'idle' | 'loading' | 'error-email' | 'error-password' | 'error-inactive' | 'error-network';
 
@@ -14,17 +15,18 @@ export default function Login() {
 
   const validateEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateEmail(email)) { setState('error-email'); return; }
     if (password.length < 6) { setState('error-password'); return; }
     setState('loading');
-    setTimeout(() => { setState('error-password'); }, 1500);
-  };
-
-  const handleDemo = (role: 'admin' | 'operator') => {
-    setState('loading');
-    setTimeout(() => login(role), 1000);
+    try {
+      await login(email, password, remember);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) setState('error-inactive');
+      else if (axios.isAxiosError(error) && error.response?.status === 401) setState('error-password');
+      else setState('error-network');
+    }
   };
 
   const errors: Record<string, string> = {
@@ -48,34 +50,6 @@ export default function Login() {
           <div className="text-center mb-8">
             <div className="font-display font-bold text-2xl text-[#1F2926] mb-1">ComércioOS</div>
             <div className="text-gray-500 text-sm">Entre no sistema</div>
-          </div>
-
-          {/* Demo buttons */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <button
-              onClick={() => handleDemo('admin')}
-              disabled={state === 'loading'}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 border-[#1F2926] bg-[#1F2926] text-white hover:bg-[#2a3a36] transition-colors disabled:opacity-60"
-            >
-              <div className="w-8 h-8 rounded-full bg-[#E8753D] flex items-center justify-center text-sm font-bold">LS</div>
-              <div className="text-xs font-semibold">Letícia Souza</div>
-              <div className="text-[10px] opacity-70">Administradora</div>
-            </button>
-            <button
-              onClick={() => handleDemo('operator')}
-              disabled={state === 'loading'}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 border-gray-200 hover:border-[#1F2926] transition-colors disabled:opacity-60"
-            >
-              <div className="w-8 h-8 rounded-full bg-[#4F8B69] flex items-center justify-center text-sm font-bold text-white">CO</div>
-              <div className="text-xs font-semibold text-gray-800">Carlos Oliveira</div>
-              <div className="text-[10px] text-gray-500">Operador</div>
-            </button>
-          </div>
-
-          <div className="relative flex items-center gap-3 mb-6">
-            <div className="flex-1 border-t border-gray-200" />
-            <span className="text-xs text-gray-400 whitespace-nowrap">ou entre com seus dados</span>
-            <div className="flex-1 border-t border-gray-200" />
           </div>
 
           {/* Error */}
@@ -154,7 +128,7 @@ export default function Login() {
         </div>
 
         <div className="text-center mt-4 text-xs text-gray-400">
-          Protótipo demonstrativo — dados fictícios
+          Seus dados são protegidos com autenticação segura.
         </div>
       </div>
     </div>

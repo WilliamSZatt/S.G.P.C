@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { api, type ApiUser } from '../lib/api';
 
 export type UserRole = 'admin' | 'operator';
 
@@ -26,7 +27,7 @@ interface AppContextType {
   currentUser: User | null;
   currentPage: Page;
   navigate: (page: Page) => void;
-  login: (role: UserRole) => void;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   toast: ToastMessage | null;
   showToast: (t: Omit<ToastMessage, 'id'>) => void;
@@ -37,11 +38,6 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 const ADMIN_ONLY: Page[] = ['dashboard', 'fiscal', 'reports', 'users', 'settings'];
-
-const USERS: Record<UserRole, User> = {
-  admin: { id: '1', name: 'Letícia Souza', email: 'leticia.souza@mercadosilva.com.br', role: 'admin' },
-  operator: { id: '2', name: 'Carlos Oliveira', email: 'carlos.oliveira@mercadosilva.com.br', role: 'operator' },
-};
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -59,12 +55,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSidebarOpen(false);
   }, [currentUser]);
 
-  const login = useCallback((role: UserRole) => {
-    setCurrentUser(USERS[role]);
-    setCurrentPage(role === 'admin' ? 'dashboard' : 'pos');
+  const login = useCallback(async (email: string, password: string, remember = false) => {
+    const { data } = await api.post<{ token: string; user: ApiUser }>('/auth/login', { email, password, remember });
+    localStorage.setItem('sgpc_access_token', data.token);
+    sessionStorage.removeItem('sgpc_access_token');
+    setCurrentUser(data.user);
+    setCurrentPage(data.user.role === 'admin' ? 'dashboard' : 'pos');
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('sgpc_access_token') ?? sessionStorage.getItem('sgpc_access_token');
+    if (!token) return;
+    api.get<{ user: ApiUser }>('/auth/me')
+      .then(({ data }) => {
+        setCurrentUser(data.user);
+        setCurrentPage(data.user.role === 'admin' ? 'dashboard' : 'pos');
+      })
+      .catch(() => {
+        localStorage.removeItem('sgpc_access_token');
+        sessionStorage.removeItem('sgpc_access_token');
+      });
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem('sgpc_access_token');
+    sessionStorage.removeItem('sgpc_access_token');
     setCurrentUser(null);
     setCurrentPage('login');
   }, []);

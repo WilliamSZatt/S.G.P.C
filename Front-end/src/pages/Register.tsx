@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Eye, EyeOff, ArrowLeft, Check } from '../components/Icons';
+import { api, type RegisterPayload } from '../lib/api';
+import axios from 'axios';
 
 const SEGMENTS = ['Mercado e Mercearia', 'Padaria e Confeitaria', 'Açougue', 'Farmácia', 'Vestuário', 'Eletrônicos', 'Pet Shop', 'Outro'];
 const STATES = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
@@ -60,16 +62,27 @@ export default function Register() {
     setStep(s => s + 1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e: Record<string, string> = {};
     if (!form3.terms) e.terms = 'Aceite os Termos de Uso';
     if (!form3.privacy) e.privacy = 'Aceite a Política de Privacidade';
     if (Object.keys(e).length) { setErrors(e); return; }
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    try {
+      await api.post('/auth/register', {
+        ...form1,
+        ...form2,
+        ...form3
+      } satisfies RegisterPayload);
       setStep(4);
-    }, 2000);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message ?? 'Não foi possível concluir o cadastro.'
+        : 'Não foi possível concluir o cadastro.';
+      setErrors({ submit: message });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const FieldError = ({ field }: { field: string }) =>
@@ -235,6 +248,7 @@ export default function Register() {
             )}
 
             <div className="flex gap-3 mt-6">
+              {errors.submit && <p className="text-[#C65B42] text-xs self-center">{errors.submit}</p>}
               {step > 1 && (
                 <button onClick={() => setStep(s => s - 1)} className="flex-1 border border-gray-200 py-2.5 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                   Voltar

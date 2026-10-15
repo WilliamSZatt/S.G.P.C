@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { ArrowLeft, Mail, Eye, EyeOff, Check } from '../components/Icons';
+import { api } from '../lib/api';
+import axios from 'axios';
 
 type Step = 'forgot' | 'verify' | 'reset' | 'success' | 'error-expired' | 'error-invalid';
 
@@ -21,30 +23,46 @@ export default function ForgotPassword() {
   const [resendTimer, setResendTimer] = useState(0);
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
+  const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get('token') ?? '');
   const [showPass, setShowPass] = useState(false);
   const [passError, setPassError] = useState('');
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await api.post('/auth/forgot-password', { email });
       setLoading(false);
       setStep('verify');
       setResendTimer(60);
       const interval = setInterval(() => {
         setResendTimer(t => { if (t <= 1) { clearInterval(interval); return 0; } return t - 1; });
       }, 1000);
-    }, 1500);
+    } catch (error) {
+      setLoading(false);
+      setPassError(axios.isAxiosError(error) ? error.response?.data?.message ?? 'Falha de conexão.' : 'Falha de conexão.');
+    }
   };
 
-  const handleReset = (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPass !== confirmPass) { setPassError('As senhas não coincidem.'); return; }
     if (pwStrength(newPass) < 2) { setPassError('Senha muito fraca. Use letras, números e símbolos.'); return; }
     setPassError('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep('success'); }, 1500);
+    try {
+      if (!resetToken) {
+        setPassError('Abra o link recebido no e-mail para redefinir sua senha.');
+        return;
+      }
+      await api.post('/auth/reset-password', { token: resetToken, password: newPass, confirmPassword: confirmPass });
+      setStep('success');
+    } catch (error) {
+      setPassError(axios.isAxiosError(error) ? error.response?.data?.message ?? 'Token inválido ou expirado.' : 'Token inválido ou expirado.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const strength = pwStrength(newPass);
@@ -77,6 +95,7 @@ export default function ForgotPassword() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">E-mail</label>
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]" />
+                  {passError && <p className="text-[#C65B42] text-xs mt-1">{passError}</p>}
                 </div>
                 <button type="submit" disabled={loading} className="w-full bg-[#E8753D] text-white font-semibold py-3 rounded-xl hover:bg-[#d4662e] transition-colors disabled:opacity-70 flex items-center justify-center gap-2">
                   {loading ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Enviando...</> : 'Enviar link de recuperação'}
@@ -97,9 +116,14 @@ export default function ForgotPassword() {
               </p>
               <p className="text-gray-400 text-xs mb-6">Verifique também a pasta de spam ou lixo eletrônico.</p>
 
-              {/* Simulate clicking the link */}
-              <button onClick={() => setStep('reset')} className="w-full bg-[#1F2926] text-white font-semibold py-2.5 rounded-xl hover:bg-[#2a3a36] transition-colors mb-3 text-sm">
-                Simular: abrir link recebido
+              <input
+                value={resetToken}
+                onChange={e => setResetToken(e.target.value)}
+                placeholder="Cole o token recebido (ambiente local)"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs mb-3 focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]"
+              />
+              <button onClick={() => setStep('reset')} disabled={!resetToken} className="w-full bg-[#1F2926] text-white font-semibold py-2.5 rounded-xl hover:bg-[#2a3a36] transition-colors mb-3 text-sm disabled:opacity-50">
+                Continuar para redefinição
               </button>
 
               <button
