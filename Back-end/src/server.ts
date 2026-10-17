@@ -7,6 +7,9 @@ import { prisma } from './lib/prisma.js';
 import { errorHandler } from './middleware/errors.js';
 import { authRouter } from './routes/auth.js';
 import { homeRouter } from './routes/home.js';
+import { clientsRouter } from './routes/clients.js';
+import { inventoryRouter } from './routes/inventory.js';
+import { salesRouter } from './routes/sales.js';
 
 const app = express();
 
@@ -18,6 +21,9 @@ app.use(morgan('dev'));
 app.get('/health', (_request, response) => response.json({ status: 'ok' }));
 app.use('/api/home', homeRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/clients', clientsRouter);
+app.use('/api/inventory', inventoryRouter);
+app.use('/api/sales', salesRouter);
 app.use(errorHandler);
 
 const server = app.listen(config.PORT, () => {
