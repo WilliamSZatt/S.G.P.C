@@ -1,12 +1,14 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { PRODUCTS, CLIENTS, Product } from '../data/mockData';
 import { Search, Plus, Minus, X, Barcode, CreditCard, ShoppingCart, Check, User } from '../components/Icons';
+import { api } from '../lib/api';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface CartItem { product: Product; qty: number }
+interface Product { id: string; name: string; description: string; sku: string; ean?: string; category: string; price: number; quantity: number; minStock: number; status: 'active' | 'inactive' }
+interface Client { id: string; name: string; email: string; status: 'active' | 'inactive' }
 
 type PayMethod = 'dinheiro' | 'credito' | 'debito' | 'pix';
 type SaleState = 'idle' | 'loading' | 'success' | 'error-stock' | 'error-payment' | 'error-network';
@@ -34,7 +36,20 @@ export default function POSPage() {
   const [scanResult, setScanResult] = useState<Product | null>(null);
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
-  const [products, setProducts] = useState(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'active' } }),
+      api.get<{ items: Client[] }>('/clients', { params: { status: 'active', limit: 100 } })
+    ])
+      .then(([productResponse, clientResponse]) => {
+        setProducts(productResponse.data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] })));
+        setClients(clientResponse.data.items.map(client => ({ ...client, status: client.status.toLowerCase() as Client['status'] })));
+      })
+      .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar produtos e clientes.' }));
+  }, [showToast]);
 
   const filteredProducts = products.filter(p => p.status === 'active' && (!search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase()) || (p.ean || '').includes(search)));
 
@@ -75,23 +90,29 @@ export default function POSPage() {
     if (scanResult) { addToCart(scanResult); setShowScanner(false); setScanState('ready'); setScanResult(null); }
   };
 
-  const finalizeSale = () => {
+  const finalizeSale = async () => {
     if (cart.length === 0) { showToast({ type: 'error', message: 'O carrinho está vazio.' }); return; }
     if (!payMethod) { showToast({ type: 'error', message: 'Selecione uma forma de pagamento.' }); return; }
     if (payMethod === 'dinheiro' && (parseFloat(cashReceived) || 0) < total) {
       showToast({ type: 'error', message: 'Valor recebido insuficiente.' }); return;
     }
     setSaleState('loading');
-    setTimeout(() => {
-      const id = `VND-${Date.now().toString().slice(-7)}`;
-      // Update stock
-      setProducts(prev => prev.map(p => {
-        const item = cart.find(i => i.product.id === p.id);
-        return item ? { ...p, quantity: Math.max(0, p.quantity - item.qty) } : p;
-      }));
-      setLastSale({ id, total, change });
+    try {
+      const { data } = await api.post<{ sale: { number: string; total: number; change: number | null } }>('/sales', {
+        clientId: selectedClient || undefined,
+        discount: discountAmt,
+        paymentMethod: payMethod,
+        cashReceived: payMethod === 'dinheiro' ? Number(cashReceived) : undefined,
+        items: cart.map(item => ({ productId: item.product.id, quantity: item.qty }))
+      });
+      const productResponse = await api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'active' } });
+      setProducts(productResponse.data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] })));
+      setLastSale({ id: data.sale.number, total: data.sale.total, change: data.sale.change ?? 0 });
       setSaleState('success');
-    }, 1500);
+    } catch {
+      setSaleState('error-network');
+      showToast({ type: 'error', message: 'Não foi possível finalizar a venda.' });
+    }
   };
 
   const newSale = () => {
@@ -99,8 +120,8 @@ export default function POSPage() {
     setSaleState('idle'); setLastSale(null);
   };
 
-  const selectedClientName = selectedClient ? CLIENTS.find(c => c.id === selectedClient)?.name : null;
-  const filteredClients = CLIENTS.filter(c => c.status === 'active' && (!clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.email.toLowerCase().includes(clientSearch.toLowerCase())));
+  const selectedClientName = selectedClient ? clients.find(c => c.id === selectedClient)?.name : null;
+  const filteredClients = clients.filter(c => c.status === 'active' && (!clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.email.toLowerCase().includes(clientSearch.toLowerCase())));
 
   return (
     <AuthLayout title="Vendas / PDV">

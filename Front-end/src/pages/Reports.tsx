@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import AuthLayout from '../components/AuthLayout';
-import { RECENT_SALES } from '../data/mockData';
 import { Download, BarChart, Filter } from '../components/Icons';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const RECENT_SALES: Array<{ id: string; client: string; total: number; payment: string; status: string; date: string }> = [];
 
 const RAW = [70,85,60,90,75,88,95,72,80,85,92,78,88,96,102,85,90,95,88,92,98,85,90,95,100,88,92,97,95,48];
 const DAYS = RAW.map((v, i) => ({ day: i + 1, value: v * 500 }));

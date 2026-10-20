@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { isValidCpf } from '../lib/validation.js';
 
 const router = Router();
 const clientSchema = z.object({
   name: z.string().trim().min(2),
-  cpf: z.string().trim().optional(),
+  cpf: z.string().trim().optional().refine((value) => !value || isValidCpf(value), 'CPF inválido.'),
   phone: z.string().trim().optional(),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   status: z.enum(['active', 'inactive']).optional()

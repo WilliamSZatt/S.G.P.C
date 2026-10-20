@@ -1,10 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { STORE } from '../data/mockData';
 import { Check, X } from '../components/Icons';
+import { api } from '../lib/api';
 
 const TABS_ADMIN = ['Dados do comércio', 'Perfil do admin', 'PDV', 'Estoque', 'Notificações', 'Integrações'];
+
+type StoreData = {
+  document: string;
+  legalName: string;
+  fantasyName: string;
+  stateTaxId: string | null;
+  segment: string;
+  zipCode: string;
+  address: string;
+  number: string;
+  city: string;
+  state: string;
+};
+
+type StoreUser = {
+  name: string;
+  email: string;
+  phone: string | null;
+  birthDate: string | null;
+  role: string;
+};
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -22,15 +43,17 @@ export default function Settings() {
   const isAdmin = currentUser?.role === 'admin';
   const [tab, setTab] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [storeData, setStoreData] = useState<StoreData | null>(null);
+  const [storeUser, setStoreUser] = useState<StoreUser | null>(null);
 
-  const [storeForm, setStoreForm] = useState({
-    fantasyName: STORE.fantasyName,
-    legalName: STORE.legalName,
-    cnpj: STORE.cnpjMasked,
-    phone: STORE.phone,
-    email: STORE.email,
-    address: STORE.address,
-  });
+  useEffect(() => {
+    api.get<{ store: StoreData; user: StoreUser }>('/auth/store')
+      .then(({ data }) => {
+        setStoreData(data.store);
+        setStoreUser(data.user);
+      })
+      .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar os dados do comércio.' }));
+  }, [showToast]);
 
   const [notifSettings, setNotifSettings] = useState({
     stockCritical: true,
@@ -78,29 +101,25 @@ export default function Settings() {
           {tab === 0 && isAdmin && (
             <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
               <h3 className="font-display font-semibold text-[#1F2926] mb-4">Dados do comércio</h3>
-              {[
-                { label: 'Nome fantasia', field: 'fantasyName' },
-                { label: 'Razão social', field: 'legalName' },
-                { label: 'CNPJ', field: 'cnpj', disabled: true },
-                { label: 'Telefone', field: 'phone' },
-                { label: 'E-mail', field: 'email', type: 'email' },
-                { label: 'Endereço', field: 'address' },
-              ].map(({ label, field, type, disabled }) => (
-                <div key={field}>
+              {!storeData ? (
+                <p className="text-sm text-gray-500">Carregando dados do cadastro...</p>
+              ) : [
+                ['Nome fantasia', storeData.fantasyName],
+                ['Razão social', storeData.legalName],
+                ['CPF/CNPJ', storeData.document],
+                ['Inscrição estadual', storeData.stateTaxId || 'Não informada'],
+                ['Segmento', storeData.segment],
+                ['CEP', storeData.zipCode],
+                ['Endereço', storeData.address],
+                ['Número', storeData.number],
+                ['Cidade', storeData.city],
+                ['Estado', storeData.state],
+              ].map(([label, value]) => (
+                <div key={label}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-                  <input
-                    type={type || 'text'}
-                    value={(storeForm as any)[field]}
-                    onChange={e => setStoreForm(p => ({ ...p, [field]: e.target.value }))}
-                    disabled={disabled}
-                    className={`${inpCls} ${disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`}
-                  />
-                  {disabled && <p className="text-xs text-gray-400 mt-1">Este campo não pode ser alterado.</p>}
+                  <input value={value} readOnly className={`${inpCls} bg-gray-50 text-gray-700`} />
                 </div>
               ))}
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-                Plano atual: <strong>{STORE.plan}</strong> — Protótipo demonstrativo. Dados fictícios.
-              </div>
             </div>
           )}
 
@@ -109,17 +128,24 @@ export default function Settings() {
             <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
               <h3 className="font-display font-semibold text-[#1F2926] mb-4">Perfil do Administrador</h3>
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full bg-[#E8753D] flex items-center justify-center text-white font-display font-bold text-xl">LS</div>
+                <div className="w-16 h-16 rounded-full bg-[#E8753D] flex items-center justify-center text-white font-display font-bold text-xl">
+                  {storeUser?.name.split(' ').map(n => n[0]).slice(0, 2).join('') || '--'}
+                </div>
                 <div>
-                  <div className="font-semibold text-[#1F2926]">Letícia Souza</div>
+                  <div className="font-semibold text-[#1F2926]">{storeUser?.name || 'Carregando...'}</div>
                   <div className="text-sm text-[#4F8B69]">Administrador</div>
                   <button className="text-xs text-[#4D7CA8] mt-1 hover:underline">Alterar foto</button>
                 </div>
               </div>
-              {[['Nome completo', 'Letícia Souza'], ['E-mail', 'leticia.souza@mercadosilva.com.br'], ['Telefone', '(11) 99876-5432']].map(([label, value]) => (
+              {[
+                ['Nome completo', storeUser?.name || ''],
+                ['E-mail', storeUser?.email || ''],
+                ['Telefone', storeUser?.phone || 'Não informado'],
+                ['Data de nascimento', storeUser?.birthDate ? new Date(storeUser.birthDate).toLocaleDateString('pt-BR') : 'Não informada'],
+              ].map(([label, value]) => (
                 <div key={label}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-                  <input defaultValue={value} className={inpCls} />
+                  <input value={value} readOnly className={`${inpCls} bg-gray-50 text-gray-700`} />
                 </div>
               ))}
               <div className="border-t border-gray-100 pt-4">

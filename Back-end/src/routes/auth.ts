@@ -6,6 +6,7 @@ import { createAccessToken, createOpaqueToken, hashOpaqueToken } from '../lib/to
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notifyPasswordReset } from '../services/password-reset.js';
+import { isAdultBirthDate, isValidCpfOrCnpj } from '../lib/validation.js';
 
 const router = Router();
 const email = z.string().trim().email().transform((value) => value.toLowerCase());
@@ -24,6 +25,7 @@ const registerSchema = z.object({
   state: z.string().trim().length(2),
   name: z.string().trim().min(2),
   phone: z.string().trim().optional(),
+  birthDate: z.string().refine(isAdultBirthDate, 'A idade deve estar entre 18 e 100 anos.'),
   email,
   password,
   confirmPassword: z.string().min(1),
@@ -32,6 +34,9 @@ const registerSchema = z.object({
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'As senhas não coincidem.',
   path: ['confirmPassword']
+}).refine((data) => isValidCpfOrCnpj(data.cnpj), {
+  message: 'CPF ou CNPJ inválido.',
+  path: ['cnpj']
 });
 
 const loginSchema = z.object({ email, password: z.string().min(1), remember: z.boolean().optional() });
@@ -81,6 +86,7 @@ router.post('/register', async (request, response) => {
       data: {
         name: data.name,
         phone: data.phone || null,
+        birthDate: new Date(`${data.birthDate}T00:00:00.000Z`),
         email: data.email,
         passwordHash: await hashPassword(data.password),
         storeId: store.id
@@ -121,6 +127,37 @@ router.get('/me', requireAuth, async (request, response) => {
     return;
   }
   response.json({ user: publicUser(user) });
+});
+
+router.get('/store', requireAuth, async (request, response) => {
+  const store = await prisma.store.findUnique({
+    where: { id: request.auth!.storeId },
+    select: {
+      id: true,
+      document: true,
+      legalName: true,
+      fantasyName: true,
+      stateTaxId: true,
+      segment: true,
+      zipCode: true,
+      address: true,
+      number: true,
+      city: true,
+      state: true,
+      users: {
+        where: { id: request.auth!.sub },
+        select: { id: true, name: true, email: true, phone: true, birthDate: true, role: true }
+      }
+    }
+  });
+
+  if (!store || store.users.length === 0) {
+    response.status(404).json({ message: 'Comércio não encontrado.' });
+    return;
+  }
+
+  const { users, ...storeData } = store;
+  response.json({ store: storeData, user: users[0] });
 });
 
 router.delete('/account', requireAuth, async (request, response) => {

@@ -1,6 +1,5 @@
 import { useApp } from '../contexts/AppContext';
 import { Page } from '../contexts/AppContext';
-import { STORE } from '../data/mockData';
 import {
   Home, ShoppingCart, Users, Package, BarChart, X,
 } from './Icons';
@@ -58,7 +57,7 @@ export default function Sidebar() {
         <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
           <div>
             <div className="font-display font-bold text-lg text-white leading-tight">ComércioOS</div>
-            <div className="text-[10px] text-white/50 mt-0.5 leading-tight truncate max-w-[160px]">{STORE.tenant}</div>
+            <div className="text-[10px] text-white/50 mt-0.5 leading-tight truncate max-w-[160px]">Dados do comércio</div>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1">
             <X size={18} />

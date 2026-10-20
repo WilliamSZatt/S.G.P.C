@@ -57,8 +57,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string, remember = false) => {
     const { data } = await api.post<{ token: string; user: ApiUser }>('/auth/login', { email, password, remember });
-    localStorage.setItem('sgpc_access_token', data.token);
+    localStorage.removeItem('sgpc_access_token');
     sessionStorage.removeItem('sgpc_access_token');
+    (remember ? localStorage : sessionStorage).setItem('sgpc_access_token', data.token);
     setCurrentUser(data.user);
     setCurrentPage(data.user.role === 'admin' ? 'dashboard' : 'pos');
   }, []);

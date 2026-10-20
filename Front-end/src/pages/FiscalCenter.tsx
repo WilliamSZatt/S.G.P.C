@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import AuthLayout from '../components/AuthLayout';
-import { FISCAL_DATA, STORE } from '../data/mockData';
 import { Download, Filter } from '../components/Icons';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const STORE = { legalName: '', fantasyName: '', cnpjMasked: '', ie: '', segment: '' };
+const FISCAL_DATA: Array<{ competence: string; revenue: number; expenses: number; taxes: number; das: number; dueDate: string; status: string }> = [];
 
 export default function FiscalCenter() {
   const [period, setPeriod] = useState('Todos');

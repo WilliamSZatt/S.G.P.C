@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Check, ChevronRight } from '../components/Icons';
-import { STORE } from '../data/mockData';
+import { api } from '../lib/api';
 
 const STEPS = [
   { title: 'Confirmar dados do comércio', desc: 'Verifique as informações do seu estabelecimento.' },
@@ -12,14 +12,43 @@ const STEPS = [
   { title: 'Concluir configuração', desc: 'Você está pronto para começar!' },
 ];
 
+type StoreData = {
+  document: string;
+  legalName: string;
+  fantasyName: string;
+  segment: string;
+  address: string;
+  number: string;
+  city: string;
+  state: string;
+};
+
+type StoreUser = {
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+};
+
 export default function Onboarding() {
-  const { navigate, login } = useApp();
+  const { navigate, showToast } = useApp();
   const [step, setStep] = useState(0);
   const [productName, setProductName] = useState('');
   const [productPrice, setProductPrice] = useState('');
   const [productQty, setProductQty] = useState('');
   const [stockQty, setStockQty] = useState('');
   const [saving, setSaving] = useState(false);
+  const [store, setStore] = useState<StoreData | null>(null);
+  const [user, setUser] = useState<StoreUser | null>(null);
+
+  useEffect(() => {
+    api.get<{ store: StoreData; user: StoreUser }>('/auth/store')
+      .then(({ data }) => {
+        setStore(data.store);
+        setUser(data.user);
+      })
+      .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar os dados reais do cadastro.' }));
+  }, [showToast]);
 
   const handleNext = () => {
     if (step < STEPS.length - 1) {
@@ -29,7 +58,6 @@ export default function Onboarding() {
   };
 
   const handleFinish = (target: 'dashboard' | 'pos') => {
-    login('admin');
     navigate(target);
   };
 
@@ -66,11 +94,11 @@ export default function Onboarding() {
           {step === 0 && (
             <div className="bg-[#F6F7F8] rounded-xl p-5 space-y-3">
               {[
-                ['Nome fantasia', STORE.fantasyName],
-                ['Razão social', STORE.legalName],
-                ['CNPJ', STORE.cnpjMasked],
-                ['Segmento', STORE.segment],
-                ['Endereço', `${STORE.address}, ${STORE.complement} — ${STORE.city}/${STORE.state}`],
+                ['Nome fantasia', store?.fantasyName || 'Carregando...'],
+                ['Razão social', store?.legalName || 'Carregando...'],
+                ['CNPJ', store?.document || 'Carregando...'],
+                ['Segmento', store?.segment || 'Carregando...'],
+                ['Endereço', store ? `${store.address}, ${store.number} - ${store.city}/${store.state}` : 'Carregando...'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4 text-sm">
                   <span className="text-gray-500 flex-shrink-0">{label}</span>
@@ -84,10 +112,10 @@ export default function Onboarding() {
           {step === 1 && (
             <div className="bg-[#F6F7F8] rounded-xl p-5 space-y-3">
               {[
-                ['Nome', 'Letícia Souza'],
-                ['E-mail', 'leticia.souza@mercadosilva.com.br'],
-                ['Telefone', '(11) 99876-5432'],
-                ['Perfil', 'Administrador/Gerente'],
+                ['Nome', user?.name || 'Carregando...'],
+                ['E-mail', user?.email || 'Carregando...'],
+                ['Telefone', user?.phone || 'Não informado'],
+                ['Perfil', user?.role === 'admin' ? 'Administrador' : 'Operador'],
                 ['Status', 'Ativo'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4 text-sm">
@@ -140,18 +168,10 @@ export default function Onboarding() {
           {step === 4 && (
             <div>
               <div className="bg-[#1F2926] rounded-xl p-5 text-white">
-                <div className="font-display font-semibold mb-3">Vendas / PDV</div>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  {['Arroz 5kg', 'Feijão 1kg', 'Leite 1L'].map(p => (
-                    <div key={p} className="bg-white/10 rounded-lg p-2.5 text-center">
-                      <div className="text-xs opacity-70 truncate">{p}</div>
-                      <div className="font-display font-bold text-sm mt-0.5">R$ 28,90</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="bg-[#E8753D] rounded-lg px-3 py-2 text-center text-sm font-semibold">
-                  ⚡ Finalizar venda — R$ 87,70
-                </div>
+              <div className="font-display font-semibold mb-3">Vendas / PDV</div>
+              <div className="bg-white/10 rounded-lg p-5 text-center text-sm opacity-80">
+                Seus produtos aparecerão aqui depois que forem cadastrados.
+              </div>
               </div>
               <div className="mt-4 text-sm text-gray-500 space-y-1">
                 <p>✓ Busque produtos por nome, SKU ou código de barras</p>

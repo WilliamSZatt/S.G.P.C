@@ -1,18 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { CLIENTS, Client } from '../data/mockData';
 import { Search, Plus, Edit, X, Check, ChevronLeft, ChevronRight } from '../components/Icons';
+import { api } from '../lib/api';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 type ModalMode = 'new' | 'edit' | 'view' | null;
+type Client = { id: string; name: string; cpf: string; phone: string; email: string; totalSpent: number; lastPurchase: string; status: 'active' | 'inactive'; purchases?: unknown[] };
 
 const EMPTY: Omit<Client, 'id' | 'totalSpent' | 'lastPurchase' | 'purchases'> = { name: '', cpf: '', phone: '', email: '', status: 'active' };
 
 export default function Clients() {
   const { showToast } = useApp();
-  const [clients, setClients] = useState(CLIENTS);
+  const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [modal, setModal] = useState<ModalMode>(null);
@@ -23,6 +24,12 @@ export default function Clients() {
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const PER_PAGE = 8;
+
+  useEffect(() => {
+    api.get<{ items: Client[] }>('/clients', { params: { limit: 100 } })
+      .then(({ data }) => setClients(data.items.map(client => ({ ...client, status: client.status.toLowerCase() as Client['status'], lastPurchase: client.lastPurchase ? new Date(client.lastPurchase).toLocaleDateString('pt-BR') : '—' }))))
+      .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar os clientes.' }));
+  }, [showToast]);
 
   const filtered = clients.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
@@ -46,27 +53,35 @@ export default function Clients() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
-    setTimeout(() => {
-      if (modal === 'new') {
-        const newClient: Client = { ...form, id: Date.now().toString(), totalSpent: 0, lastPurchase: '—' };
-        setClients(p => [newClient, ...p]);
-        showToast({ type: 'success', message: 'Cliente cadastrado com sucesso!' });
-      } else if (modal === 'edit' && selectedClient) {
-        setClients(p => p.map(c => c.id === selectedClient.id ? { ...c, ...form } : c));
-        showToast({ type: 'success', message: 'Cliente atualizado com sucesso!' });
-      }
-      setSaving(false);
+    try {
+      const result = modal === 'new'
+        ? await api.post<{ client: Client }>('/clients', form)
+        : await api.patch<{ client: Client }>(`/clients/${selectedClient?.id}`, form);
+      const client = { ...result.data.client, status: result.data.client.status.toLowerCase() as Client['status'], lastPurchase: result.data.client.lastPurchase ? new Date(result.data.client.lastPurchase).toLocaleDateString('pt-BR') : '—' };
+      setClients(p => modal === 'new' ? [client, ...p] : p.map(item => item.id === client.id ? client : item));
+      showToast({ type: 'success', message: modal === 'new' ? 'Cliente cadastrado com sucesso!' : 'Cliente atualizado com sucesso!' });
       closeModal();
-    }, 1000);
+    } catch {
+      setErrors({ submit: 'Não foi possível salvar o cliente.' });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    setClients(p => p.map(c => c.id === id ? { ...c, status: c.status === 'active' ? 'inactive' : 'active' } : c));
-    setConfirmDeactivate(null);
-    showToast({ type: 'success', message: 'Status do cliente atualizado.' });
+  const toggleStatus = async (id: string) => {
+    const client = clients.find(item => item.id === id);
+    if (!client) return;
+    try {
+      const { data } = await api.patch<{ client: Client }>(`/clients/${id}`, { status: client.status === 'active' ? 'inactive' : 'active' });
+      setClients(p => p.map(item => item.id === id ? { ...item, status: data.client.status.toLowerCase() as Client['status'] } : item));
+      setConfirmDeactivate(null);
+      showToast({ type: 'success', message: 'Status do cliente atualizado.' });
+    } catch {
+      showToast({ type: 'error', message: 'Não foi possível atualizar o status.' });
+    }
   };
 
   const StatusBadge = ({ status }: { status: string }) => (

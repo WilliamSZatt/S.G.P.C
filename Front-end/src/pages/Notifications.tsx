@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { useApp, Page } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { NOTIFICATIONS } from '../data/mockData';
 import { Bell, Check, AlertTriangle, Info, X } from '../components/Icons';
 
 type Notif = { id: string; type: string; title: string; message: string; date: string; read: boolean; link: string };
 
 export default function Notifications() {
   const { currentUser, navigate, showToast } = useApp();
-  const isAdmin = currentUser?.role === 'admin';
-  const raw = isAdmin ? NOTIFICATIONS.admin : NOTIFICATIONS.operator;
+  const raw: Notif[] = [];
 
   const [notifs, setNotifs] = useState<Notif[]>(raw);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');

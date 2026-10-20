@@ -32,6 +32,7 @@ export type RegisterPayload = {
   state: string;
   name: string;
   phone: string;
+  birthDate: string;
   email: string;
   password: string;
   confirmPassword: string;

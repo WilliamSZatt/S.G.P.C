@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { PRODUCTS, Product } from '../data/mockData';
 import { Search, Plus, Edit, X, AlertTriangle, Filter } from '../components/Icons';
+import { api } from '../lib/api';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const CATEGORIES = ['Todos', 'Grãos', 'Laticínios', 'Mercearia', 'Massas', 'Conservas', 'Bebidas', 'Limpeza', 'Snacks', 'Carnes'];
+type Product = { id: string; name: string; description: string; sku: string; ean?: string; category: string; price: number; quantity: number; minStock: number; status: 'active' | 'inactive' };
 
 function stockStatus(p: Product): { label: string; cls: string } {
   if (p.status === 'inactive') return { label: 'Inativo', cls: 'bg-gray-100 text-gray-500' };
@@ -18,7 +19,7 @@ function stockStatus(p: Product): { label: string; cls: string } {
 export default function StockPage() {
   const { currentUser, showToast } = useApp();
   const isAdmin = currentUser?.role === 'admin';
-  const [products, setProducts] = useState(PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todos');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -28,6 +29,13 @@ export default function StockPage() {
 
   const [form, setForm] = useState({ name: '', description: '', sku: '', ean: '', category: 'Grãos', price: '', quantity: '', minStock: '10', status: 'active' });
   const [movForm, setMovForm] = useState({ qty: '', reason: '', notes: '' });
+
+  const loadProducts = () => api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'all' } })
+    .then(({ data }) => setProducts(data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] }))));
+
+  useEffect(() => {
+    loadProducts().catch(() => showToast({ type: 'error', message: 'Não foi possível carregar o estoque.' }));
+  }, [showToast]);
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
@@ -43,36 +51,36 @@ export default function StockPage() {
   const openMov = (p: Product, type: 'entrada' | 'baixa' | 'ajuste') => { setSelected(p); setMovForm({ qty: '', reason: '', notes: '' }); setModal(type); };
   const closeModal = () => { setModal(null); setSelected(null); };
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     setSaving(true);
-    setTimeout(() => {
-      if (modal === 'new') {
-        const np: Product = { id: Date.now().toString(), name: form.name, description: form.description, sku: form.sku, ean: form.ean || undefined, category: form.category, price: parseFloat(form.price) || 0, quantity: parseInt(form.quantity) || 0, minStock: parseInt(form.minStock) || 10, status: form.status as any };
-        setProducts(p => [np, ...p]);
-        showToast({ type: 'success', message: 'Produto cadastrado com sucesso!' });
-      } else if (selected) {
-        setProducts(p => p.map(x => x.id === selected.id ? { ...x, name: form.name, description: form.description, sku: form.sku, ean: form.ean || undefined, category: form.category, price: parseFloat(form.price) || x.price, quantity: parseInt(form.quantity) || x.quantity, minStock: parseInt(form.minStock) || x.minStock, status: form.status as 'active' | 'inactive' } : x));
-        showToast({ type: 'success', message: 'Produto atualizado com sucesso!' });
-      }
-      setSaving(false);
+    try {
+      const payload = { ...form, price: Number(form.price), quantity: Number(form.quantity), minStock: Number(form.minStock) };
+      if (modal === 'new') await api.post('/inventory/products', payload);
+      else if (selected) await api.patch(`/inventory/products/${selected.id}`, payload);
+      await loadProducts();
+      showToast({ type: 'success', message: modal === 'new' ? 'Produto cadastrado com sucesso!' : 'Produto atualizado com sucesso!' });
       closeModal();
-    }, 900);
+    } catch {
+      showToast({ type: 'error', message: 'Não foi possível salvar o produto.' });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleMovimento = (type: 'entrada' | 'baixa' | 'ajuste') => {
+  const handleMovimento = async (type: 'entrada' | 'baixa' | 'ajuste') => {
     const qty = parseInt(movForm.qty) || 0;
     if (!qty) return;
     setSaving(true);
-    setTimeout(() => {
-      setProducts(p => p.map(x => {
-        if (x.id !== selected?.id) return x;
-        const newQty = type === 'entrada' ? x.quantity + qty : type === 'baixa' ? Math.max(0, x.quantity - qty) : qty;
-        return { ...x, quantity: newQty };
-      }));
+    try {
+      await api.post(`/inventory/products/${selected?.id}/movements`, { type, quantity: qty, reason: movForm.reason, notes: movForm.notes });
+      await loadProducts();
       showToast({ type: 'success', message: `Movimentação registrada com sucesso!` });
-      setSaving(false);
       closeModal();
-    }, 900);
+    } catch {
+      showToast({ type: 'error', message: 'Não foi possível registrar a movimentação.' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const StockBadge = ({ p }: { p: Product }) => {

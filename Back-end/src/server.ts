@@ -18,6 +18,15 @@ app.use(cors({ origin: config.FRONTEND_URL }));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 
+app.get('/', (_request, response) => {
+  response.json({
+    service: 'ComércioOS API',
+    status: 'ok',
+    frontend: config.FRONTEND_URL,
+    message: 'Abra o endereço do frontend para acessar a interface.'
+  });
+});
+
 app.get('/health', (_request, response) => response.json({ status: 'ok' }));
 app.use('/api/home', homeRouter);
 app.use('/api/auth', authRouter);

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { DASHBOARD_DATA, RECENT_SALES, PRODUCTS } from '../data/mockData';
 import { TrendingUp, TrendingDown, AlertTriangle, Plus, ShoppingCart, Users, Package, BarChart } from '../components/Icons';
 
 const PERIODS = ['Hoje', '7 dias', 'Este mês', 'Trimestre'];
@@ -9,8 +8,19 @@ const PERIODS = ['Hoje', '7 dias', 'Este mês', 'Trimestre'];
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface ChartPoint { month: string; revenue: number; expenses: number }
+const DASHBOARD_DATA = { revenue: 0, revenueChange: 0, profit: 0, profitChange: 0, expenses: 0, expensesChange: 0, avgTicket: 0, avgTicketChange: 0, chart: [] as ChartPoint[] };
+const RECENT_SALES: Array<{ id: string; client: string; total: number; payment: string; status: string; date: string }> = [];
+const PRODUCTS: Array<{ status: string; quantity: number; minStock: number; name: string; price: number }> = [];
 
 function LineChart({ data }: { data: ChartPoint[] }) {
+  if (data.length === 0) {
+    return (
+      <div className="h-40 flex items-center justify-center text-sm text-gray-400">
+        Ainda não há dados suficientes para exibir o gráfico.
+      </div>
+    );
+  }
+
   const W = 560, H = 160, PAD = { top: 16, right: 16, bottom: 28, left: 52 };
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
@@ -156,7 +166,7 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            <LineChart data={data.chartData} />
+            <LineChart data={data.chart} />
           </div>
 
           {/* Quick actions */}

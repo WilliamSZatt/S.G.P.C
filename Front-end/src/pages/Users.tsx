@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { TEAM_MEMBERS } from '../data/mockData';
 import { Search, Plus, Edit, X, Check } from '../components/Icons';
 
-type Member = typeof TEAM_MEMBERS[0];
+type Member = { id: string; name: string; email: string; phone: string; role: string; status: string; lastActivity: string; createdAt: string };
 
 export default function Users() {
   const { showToast } = useApp();
-  const [members, setMembers] = useState(TEAM_MEMBERS);
+  const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<'new' | 'edit' | null>(null);
   const [selected, setSelected] = useState<Member | null>(null);

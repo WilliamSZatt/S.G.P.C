@@ -2,7 +2,6 @@ import { ReactNode, useState, useRef, useEffect } from 'react';
 import { useApp, Page } from '../contexts/AppContext';
 import Sidebar from './Sidebar';
 import { Bell, Menu, X, Check, AlertTriangle, Info, Settings, LogOut } from './Icons';
-import { STORE, NOTIFICATIONS } from '../data/mockData';
 
 interface Props {
   children: ReactNode;
@@ -14,7 +13,7 @@ type Notif = { id: string; type: string; title: string; message: string; date: s
 export default function AuthLayout({ children, title }: Props) {
   const { currentUser, navigate, setSidebarOpen, sidebarOpen } = useApp();
   const isAdmin = currentUser?.role === 'admin';
-  const raw = isAdmin ? NOTIFICATIONS.admin : NOTIFICATIONS.operator;
+  const raw: Notif[] = [];
 
   const [notifs, setNotifs] = useState<Notif[]>(raw);
   const [open, setOpen] = useState(false);
@@ -81,7 +80,7 @@ export default function AuthLayout({ children, title }: Props) {
             {title && (
               <h1 className="font-display font-semibold text-gray-900 text-base lg:text-lg truncate">{title}</h1>
             )}
-            <div className="text-xs text-gray-400 hidden sm:block">{STORE.fantasyName}</div>
+            <div className="text-xs text-gray-400 hidden sm:block">{currentUser?.name ?? 'Comércio'}</div>
           </div>
 
           <div className="flex items-center gap-2">

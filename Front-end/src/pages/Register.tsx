@@ -25,7 +25,7 @@ export default function Register() {
   const [showPass2, setShowPass2] = useState(false);
 
   const [form1, setForm1] = useState({ cnpj: '', legalName: '', fantasyName: '', ie: '', segment: '', cep: '', address: '', number: '', city: '', state: 'SP' });
-  const [form2, setForm2] = useState({ name: '', phone: '', email: '', password: '', confirmPassword: '' });
+  const [form2, setForm2] = useState({ name: '', phone: '', birthDate: '', email: '', password: '', confirmPassword: '' });
   const [form3, setForm3] = useState({ terms: false, privacy: false });
 
   const strength = pwStrength(form2.password);
@@ -48,6 +48,14 @@ export default function Register() {
   const validateStep2 = () => {
     const e: Record<string, string> = {};
     if (!form2.name) e.name = 'Nome obrigatório';
+    if (!form2.birthDate) e.birthDate = 'Data de nascimento obrigatória';
+    else {
+      const birthDate = new Date(`${form2.birthDate}T00:00:00`);
+      const today = new Date();
+      const minimum = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+      const maximum = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+      if (birthDate < minimum || birthDate > maximum) e.birthDate = 'A idade deve estar entre 18 e 100 anos';
+    }
     if (!form2.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form2.email)) e.email = 'E-mail inválido';
     if (strength < 2) e.password = 'Senha muito fraca. Use pelo menos 8 caracteres.';
     if (form2.password !== form2.confirmPassword) e.confirmPassword = 'As senhas não coincidem';
@@ -76,10 +84,17 @@ export default function Register() {
       } satisfies RegisterPayload);
       setStep(4);
     } catch (error) {
-      const message = axios.isAxiosError(error)
-        ? error.response?.data?.message ?? 'Não foi possível concluir o cadastro.'
-        : 'Não foi possível concluir o cadastro.';
-      setErrors({ submit: message });
+      if (axios.isAxiosError(error) && Array.isArray(error.response?.data?.errors)) {
+        const serverErrors = Object.fromEntries(
+          error.response.data.errors.map((item: { field: string; message: string }) => [item.field, item.message])
+        );
+        setErrors(serverErrors);
+      } else {
+        const message = axios.isAxiosError(error)
+          ? error.response?.data?.message ?? 'Não foi possível concluir o cadastro.'
+          : 'Não foi possível concluir o cadastro.';
+        setErrors({ submit: message });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -188,6 +203,11 @@ export default function Register() {
                   <input value={form2.phone} onChange={e => setForm2(p => ({...p, phone: e.target.value}))} placeholder="(11) 99999-9999" className={inputCls('phone')} />
                 </div>
                 <div>
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Data de nascimento *</label>
+                  <input type="date" value={form2.birthDate} onChange={e => setForm2(p => ({...p, birthDate: e.target.value}))} className={inputCls('birthDate')} />
+                  <FieldError field="birthDate" />
+                </div>
+                <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">E-mail *</label>
                   <input type="email" value={form2.email} onChange={e => setForm2(p => ({...p, email: e.target.value}))} placeholder="seu@email.com" className={inputCls('email')} />
                   <FieldError field="email" />
@@ -230,6 +250,14 @@ export default function Register() {
               <div className="space-y-5">
                 <h3 className="font-display font-semibold text-[#1F2926]">Termos e privacidade</h3>
                 <p className="text-sm text-gray-500">Para finalizar o cadastro, leia e aceite os documentos abaixo.</p>
+                {Object.keys(errors).length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-[#C65B42]">
+                    <p className="font-semibold mb-1">Não foi possível concluir o cadastro:</p>
+                    <ul className="list-disc pl-5 space-y-0.5">
+                      {Object.entries(errors).map(([field, message]) => <li key={field}>{message}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div className={`border rounded-xl p-4 ${errors.terms ? 'border-[#C65B42] bg-red-50' : 'border-gray-200'}`}>
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" checked={form3.terms} onChange={e => setForm3(p => ({...p, terms: e.target.checked}))} className="mt-0.5 accent-[#E8753D]" />
@@ -274,7 +302,12 @@ export default function Register() {
               <Check size={28} className="text-[#4F8B69]" />
             </div>
             <h2 className="font-display font-bold text-2xl text-[#1F2926] mb-2">Comércio criado com sucesso!</h2>
-            <p className="text-gray-500 text-sm mb-8">Agora vamos configurar o seu sistema para que você possa começar a vender.</p>
+            <div className="bg-[#4F8B69]/10 border border-[#4F8B69]/20 rounded-xl p-4 mb-8 text-left">
+              <p className="text-sm font-semibold text-[#1F2926]">Você foi cadastrado como Administrador</p>
+              <p className="text-xs text-gray-600 mt-1">
+                Esta é a conta principal do comércio. Depois, você poderá criar usuários operadores para sua equipe.
+              </p>
+            </div>
             <button onClick={() => navigate('onboarding')} className="w-full bg-[#E8753D] text-white font-semibold py-3 rounded-xl hover:bg-[#d4662e] transition-colors">
               Começar configuração
             </button>
