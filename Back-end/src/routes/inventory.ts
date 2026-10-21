@@ -7,11 +7,11 @@ import { requireAdmin } from '../middleware/roles.js';
 const router = Router();
 const productSchema = z.object({
   name: z.string().trim().min(2),
-  description: z.string().trim().default(''),
+  description: z.string().trim().min(2, 'Descrição obrigatória.'),
   sku: z.string().trim().min(1),
-  ean: z.string().trim().optional(),
+  ean: z.string().trim().regex(/^\d{8}(\d{5})?$/, 'EAN deve ter 8 ou 13 dígitos.'),
   category: z.string().trim().min(2),
-  price: z.coerce.number().nonnegative(),
+  price: z.coerce.number().positive(),
   quantity: z.coerce.number().int().nonnegative(),
   minStock: z.coerce.number().int().nonnegative(),
   status: z.enum(['active', 'inactive']).default('active')
@@ -19,19 +19,27 @@ const productSchema = z.object({
 const movementSchema = z.object({
   type: z.enum(['entrada', 'baixa', 'ajuste']),
   quantity: z.coerce.number().int().positive(),
-  reason: z.string().trim().optional(),
-  notes: z.string().trim().optional()
+  reason: z.string().trim().min(2, 'Motivo obrigatório.'),
+  notes: z.string().trim().min(2, 'Observação obrigatória.')
 });
 const publicProduct = (product: { status: string; [key: string]: unknown }) => ({ ...product, status: product.status.toLowerCase() });
 
 router.use(requireAuth);
 
 router.get('/products', async (request, response) => {
-  const query = z.object({ search: z.string().trim().optional(), category: z.string().trim().optional(), status: z.enum(['all', 'active', 'inactive', 'low', 'out']).default('all') }).parse(request.query);
+  const query = z.object({
+    search: z.string().trim().optional(),
+    category: z.string().trim().optional(),
+    status: z.enum(['all', 'active', 'inactive', 'low', 'out']).default('all')
+  }).parse(request.query);
   const searchText = typeof query.search === 'string' ? query.search : undefined;
   const search = searchText ? { OR: [{ name: { contains: searchText } }, { sku: { contains: searchText } }, { ean: { contains: searchText } }] } : {};
   const category = typeof query.category === 'string' ? query.category : undefined;
-  const base = { storeId: request.auth!.storeId, ...search, ...(category ? { category } : {}) };
+  const base = {
+    storeId: request.auth!.storeId,
+    ...search,
+    ...(category ? { category } : {})
+  };
   const products = await prisma.product.findMany({ where: base, orderBy: { name: 'asc' } });
   const filtered = products.filter((product) => query.status === 'all'
     || (query.status === 'active' && product.status === 'ACTIVE')

@@ -17,9 +17,10 @@ function pwStrength(p: string) {
 }
 
 export default function Register() {
-  const { navigate } = useApp();
+  const { navigate, login } = useApp();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingCep, setLoadingCep] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPass, setShowPass] = useState(false);
   const [showPass2, setShowPass2] = useState(false);
@@ -27,6 +28,42 @@ export default function Register() {
   const [form1, setForm1] = useState({ cnpj: '', legalName: '', fantasyName: '', ie: '', segment: '', cep: '', address: '', number: '', city: '', state: 'SP' });
   const [form2, setForm2] = useState({ name: '', phone: '', birthDate: '', email: '', password: '', confirmPassword: '' });
   const [form3, setForm3] = useState({ terms: false, privacy: false });
+
+  const handleCepChange = async (value: string) => {
+    const cep = value.replace(/\D/g, '').slice(0, 8);
+    const formattedCep = cep.length > 5 ? `${cep.slice(0, 5)}-${cep.slice(5)}` : cep;
+    setForm1(p => ({ ...p, cep: formattedCep }));
+    setErrors(p => {
+      const next = { ...p };
+      delete next.cep;
+      delete next.address;
+      delete next.city;
+      return next;
+    });
+    if (cep.length !== 8) return;
+
+    setLoadingCep(true);
+    try {
+      const { data } = await axios.get<{ logradouro?: string; bairro?: string; complemento?: string; localidade?: string; uf?: string; erro?: boolean }>(`https://viacep.com.br/ws/${cep}/json/`);
+      if (data.erro) {
+        setErrors(p => ({ ...p, cep: 'CEP não encontrado.' }));
+        return;
+      }
+      const addressParts = [data.logradouro, data.bairro, data.complemento]
+        .map(value => value?.trim())
+        .filter(Boolean);
+      setForm1(p => ({
+        ...p,
+        address: addressParts.length ? addressParts.join(' - ') : p.address,
+        city: data.localidade || p.city,
+        state: STATES.includes(data.uf || '') ? data.uf || p.state : p.state
+      }));
+    } catch {
+      setErrors(p => ({ ...p, cep: 'Não foi possível consultar o CEP. Preencha o endereço manualmente.' }));
+    } finally {
+      setLoadingCep(false);
+    }
+  };
 
   const strength = pwStrength(form2.password);
   const strengthColors = ['', 'bg-[#C65B42]', 'bg-amber-400', 'bg-amber-400', 'bg-[#4F8B69]'];
@@ -82,7 +119,8 @@ export default function Register() {
         ...form2,
         ...form3
       } satisfies RegisterPayload);
-      setStep(4);
+      await login(form2.email, form2.password, true);
+      navigate('onboarding');
     } catch (error) {
       if (axios.isAxiosError(error) && Array.isArray(error.response?.data?.errors)) {
         const serverErrors = Object.fromEntries(
@@ -162,7 +200,11 @@ export default function Register() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700 block mb-1">CEP *</label>
-                    <input value={form1.cep} onChange={e => setForm1(p => ({...p, cep: e.target.value}))} placeholder="00000-000" className={inputCls('cep')} />
+                    <div className="relative">
+                      <input value={form1.cep} onChange={e => void handleCepChange(e.target.value)} placeholder="00000-000" inputMode="numeric" maxLength={9} className={inputCls('cep')} />
+                      {loadingCep && <svg className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin w-4 h-4 text-[#E8753D]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Digite o CEP para preencher o endereço automaticamente.</p>
                     <FieldError field="cep" />
                   </div>
                   <div>

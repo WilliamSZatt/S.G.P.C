@@ -26,11 +26,12 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState<string>('');
+  const [clientError, setClientError] = useState('');
   const [discount, setDiscount] = useState('');
   const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
   const [cashReceived, setCashReceived] = useState('');
   const [saleState, setSaleState] = useState<SaleState>('idle');
-  const [lastSale, setLastSale] = useState<{ id: string; total: number; change: number } | null>(null);
+  const [lastSale, setLastSale] = useState<{ id: string; total: number; change: number; clientName: string; items: CartItem[] } | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanState, setScanState] = useState<ScanState>('ready');
   const [scanResult, setScanResult] = useState<Product | null>(null);
@@ -92,6 +93,7 @@ export default function POSPage() {
 
   const finalizeSale = async () => {
     if (cart.length === 0) { showToast({ type: 'error', message: 'O carrinho está vazio.' }); return; }
+    if (!selectedClient) { setClientError('Associe um cliente antes de finalizar a venda.'); return; }
     if (!payMethod) { showToast({ type: 'error', message: 'Selecione uma forma de pagamento.' }); return; }
     if (payMethod === 'dinheiro' && (parseFloat(cashReceived) || 0) < total) {
       showToast({ type: 'error', message: 'Valor recebido insuficiente.' }); return;
@@ -99,7 +101,7 @@ export default function POSPage() {
     setSaleState('loading');
     try {
       const { data } = await api.post<{ sale: { number: string; total: number; change: number | null } }>('/sales', {
-        clientId: selectedClient || undefined,
+        clientId: selectedClient,
         discount: discountAmt,
         paymentMethod: payMethod,
         cashReceived: payMethod === 'dinheiro' ? Number(cashReceived) : undefined,
@@ -107,7 +109,7 @@ export default function POSPage() {
       });
       const productResponse = await api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'active' } });
       setProducts(productResponse.data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] })));
-      setLastSale({ id: data.sale.number, total: data.sale.total, change: data.sale.change ?? 0 });
+      setLastSale({ id: data.sale.number, total: data.sale.total, change: data.sale.change ?? 0, clientName: selectedClientName || '', items: cart });
       setSaleState('success');
     } catch {
       setSaleState('error-network');
@@ -116,7 +118,7 @@ export default function POSPage() {
   };
 
   const newSale = () => {
-    setCart([]); setPayMethod(null); setDiscount(''); setCashReceived(''); setSelectedClient('');
+    setCart([]); setPayMethod(null); setDiscount(''); setCashReceived(''); setSelectedClient(''); setClientError('');
     setSaleState('idle'); setLastSale(null);
   };
 
@@ -180,7 +182,7 @@ export default function POSPage() {
         <div className="w-full lg:w-96 flex flex-col bg-white border-t lg:border-t-0 max-h-[50vh] lg:max-h-full">
           {saleState === 'success' && lastSale ? (
             /* Success state */
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div className="print-receipt flex-1 flex flex-col items-center justify-center p-6 text-center">
               <div className="w-16 h-16 rounded-full bg-[#4F8B69]/10 flex items-center justify-center mb-4">
                 <Check size={28} className="text-[#4F8B69]" />
               </div>
@@ -189,13 +191,17 @@ export default function POSPage() {
               <div className="bg-[#F6F7F8] rounded-xl p-4 w-full mb-4 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-display font-bold text-[#1F2926]">{fmt(lastSale.total)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Pagamento</span><span className="font-medium capitalize">{payMethod}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Cliente</span><span className="font-medium">{lastSale.clientName}</span></div>
+                <div className="border-t border-gray-200 pt-2 mt-2 space-y-1 text-left">
+                  {lastSale.items.map(item => <div key={item.product.id} className="flex justify-between text-xs"><span>{item.qty}x {item.product.name}</span><span>{fmt(item.product.price * item.qty)}</span></div>)}
+                </div>
                 {lastSale.change > 0 && <div className="flex justify-between"><span className="text-gray-500">Troco</span><span className="font-semibold text-[#4F8B69]">{fmt(lastSale.change)}</span></div>}
               </div>
               <button onClick={newSale} className="w-full bg-[#E8753D] text-white font-semibold py-3 rounded-xl hover:bg-[#d4662e] transition-colors mb-2">
                 Nova venda
               </button>
-              <button className="w-full border border-gray-200 text-gray-600 text-sm py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-                Imprimir comprovante (demo)
+              <button onClick={() => window.print()} className="print-hidden w-full border border-gray-200 text-gray-600 text-sm py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                Imprimir comprovante
               </button>
             </div>
           ) : (
@@ -248,11 +254,12 @@ export default function POSPage() {
               {cart.length > 0 && (
                 <div className="border-t border-gray-100 p-4 space-y-3">
                   {/* Client */}
-                  <button onClick={() => setShowClientPicker(true)} className="w-full flex items-center gap-2 p-2.5 rounded-xl border border-dashed border-gray-300 hover:border-[#E8753D] transition-colors text-sm">
+                  <button onClick={() => setShowClientPicker(true)} className={`w-full flex items-center gap-2 p-2.5 rounded-xl border border-dashed transition-colors text-sm ${clientError ? 'border-red-400' : 'border-gray-300 hover:border-[#E8753D]'}`}>
                     <User size={15} className="text-gray-400" />
-                    <span className="text-gray-500">{selectedClientName || 'Associar cliente (opcional)'}</span>
+                    <span className={selectedClientName ? 'text-gray-700' : 'text-gray-500'}>{selectedClientName || 'Associar cliente (obrigatório)'}</span>
                     {selectedClientName && <button onClick={(e) => { e.stopPropagation(); setSelectedClient(''); }} className="ml-auto text-gray-400 hover:text-gray-600"><X size={13} /></button>}
                   </button>
+                  {clientError && <p className="text-xs text-red-600">{clientError}</p>}
 
                   {/* Discount */}
                   <div className="flex items-center gap-2">
@@ -391,11 +398,8 @@ export default function POSPage() {
                 <input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Buscar cliente..." className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]" />
               </div>
               <div className="space-y-1 max-h-60 overflow-y-auto">
-                <button onClick={() => { setSelectedClient(''); setShowClientPicker(false); }} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-50 text-sm text-gray-500">
-                  Consumidor Final (sem cadastro)
-                </button>
                 {filteredClients.map(c => (
-                  <button key={c.id} onClick={() => { setSelectedClient(c.id); setShowClientPicker(false); }} className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-50 text-sm transition-colors ${selectedClient === c.id ? 'bg-[#E8753D]/5 text-[#E8753D]' : 'text-gray-800'}`}>
+                <button key={c.id} onClick={() => { setSelectedClient(c.id); setClientError(''); setShowClientPicker(false); }} className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-50 text-sm transition-colors ${selectedClient === c.id ? 'bg-[#E8753D]/5 text-[#E8753D]' : 'text-gray-800'}`}>
                     <div className="font-medium">{c.name}</div>
                     <div className="text-xs text-gray-400">{c.phone}</div>
                   </button>

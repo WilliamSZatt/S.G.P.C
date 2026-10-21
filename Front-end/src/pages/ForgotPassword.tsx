@@ -27,18 +27,29 @@ export default function ForgotPassword() {
   const [showPass, setShowPass] = useState(false);
   const [passError, setPassError] = useState('');
 
+  const startResendTimer = () => {
+    setResendTimer(60);
+    const interval = setInterval(() => {
+      setResendTimer(t => {
+        if (t <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
+    setPassError('');
     setLoading(true);
     try {
       await api.post('/auth/forgot-password', { email });
       setLoading(false);
       setStep('verify');
-      setResendTimer(60);
-      const interval = setInterval(() => {
-        setResendTimer(t => { if (t <= 1) { clearInterval(interval); return 0; } return t - 1; });
-      }, 1000);
+      startResendTimer();
     } catch (error) {
       setLoading(false);
       setPassError(axios.isAxiosError(error) ? error.response?.data?.message ?? 'Falha de conexão.' : 'Falha de conexão.');
@@ -56,7 +67,11 @@ export default function ForgotPassword() {
         setPassError('Abra o link recebido no e-mail para redefinir sua senha.');
         return;
       }
-      await api.post('/auth/reset-password', { token: resetToken, password: newPass, confirmPassword: confirmPass });
+      await api.post('/auth/reset-password', {
+        token: resetToken.trim(),
+        password: newPass,
+        confirmPassword: confirmPass
+      });
       setStep('success');
     } catch (error) {
       setPassError(axios.isAxiosError(error) ? error.response?.data?.message ?? 'Token inválido ou expirado.' : 'Token inválido ou expirado.');
@@ -115,11 +130,14 @@ export default function ForgotPassword() {
                 Se o e-mail <strong className="text-gray-700">{maskedEmail}</strong> estiver cadastrado, enviaremos as instruções para recuperação de acesso.
               </p>
               <p className="text-gray-400 text-xs mb-6">Verifique também a pasta de spam ou lixo eletrônico.</p>
+              {passError && <p className="text-[#C65B42] text-xs mb-4">{passError}</p>}
 
               <input
                 value={resetToken}
-                onChange={e => setResetToken(e.target.value)}
-                placeholder="Cole o token recebido (ambiente local)"
+                onChange={e => setResetToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Digite o código de 6 dígitos"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs mb-3 focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]"
               />
               <button onClick={() => setStep('reset')} disabled={!resetToken} className="w-full bg-[#1F2926] text-white font-semibold py-2.5 rounded-xl hover:bg-[#2a3a36] transition-colors mb-3 text-sm disabled:opacity-50">
@@ -127,14 +145,20 @@ export default function ForgotPassword() {
               </button>
 
               <button
-                onClick={() => {
-                  if (resendTimer > 0) return;
-                  setResendTimer(60);
-                  const interval = setInterval(() => {
-                    setResendTimer(t => { if (t <= 1) { clearInterval(interval); return 0; } return t - 1; });
-                  }, 1000);
+                onClick={async () => {
+                  if (resendTimer > 0 || loading) return;
+                  setLoading(true);
+                  setPassError('');
+                  try {
+                    await api.post('/auth/forgot-password', { email });
+                    startResendTimer();
+                  } catch (error) {
+                    setPassError(axios.isAxiosError(error) ? error.response?.data?.message ?? 'Falha de conexão.' : 'Falha de conexão.');
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
-                disabled={resendTimer > 0}
+                disabled={resendTimer > 0 || loading}
                 className="text-sm text-[#E8753D] hover:underline disabled:text-gray-400 disabled:no-underline"
               >
                 {resendTimer > 0 ? `Reenviar em ${resendTimer}s` : 'Reenviar link'}

@@ -17,3 +17,54 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
 * { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-report,
+  .print-report * {
+    visibility: visible !important;
+  }
+
+  .print-report {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 24px !important;
+    background: white !important;
+  }
+
+  .report-controls {
+    display: none !important;
+  }
+
+  .print-report .bg-white {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-receipt,
+  .print-receipt * {
+    visibility: visible !important;
+  }
+
+  .print-receipt {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    color: #111827 !important;
+    background: white !important;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+}

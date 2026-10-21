@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 const saleSchema = z.object({
-  clientId: z.string().cuid().optional(),
+  clientId: z.string().cuid(),
   discount: z.coerce.number().nonnegative().default(0),
   paymentMethod: z.enum(['dinheiro', 'pix', 'credito', 'debito']),
   cashReceived: z.coerce.number().nonnegative().optional(),
@@ -26,13 +26,36 @@ router.use(requireAuth);
 
 router.get('/', async (request, response) => {
   const query = z.object({
+    search: z.string().trim().optional(),
     status: z.enum(['all', 'completed', 'cancelled', 'pending']).default('all'),
+    paymentMethod: z.enum(['all', 'dinheiro', 'pix', 'credito', 'debito']).default('all'),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
     page: z.coerce.number().int().positive().default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(20)
+    limit: z.coerce.number().int().min(1).max(1000).default(20)
   }).parse(request.query);
+  if (query.startDate && query.endDate && query.startDate > query.endDate) {
+    response.status(400).json({ message: 'O início do período não pode ser posterior ao fim.' });
+    return;
+  }
   const where = {
     storeId: request.auth!.storeId,
-    ...(query.status === 'all' ? {} : { status: query.status === 'completed' ? 'COMPLETED' as const : query.status === 'cancelled' ? 'CANCELLED' as const : 'PENDING' as const })
+    ...(query.search ? {
+      OR: [
+        { number: { contains: query.search } },
+        { client: { name: { contains: query.search } } },
+        { items: { some: { product: { name: { contains: query.search } } } } },
+        { items: { some: { product: { sku: { contains: query.search } } } } }
+      ]
+    } : {}),
+    ...(query.status === 'all' ? {} : { status: query.status === 'completed' ? 'COMPLETED' as const : query.status === 'cancelled' ? 'CANCELLED' as const : 'PENDING' as const }),
+    ...(query.paymentMethod === 'all' ? {} : { paymentMethod: paymentMap[query.paymentMethod] }),
+    ...(query.startDate || query.endDate ? {
+      createdAt: {
+        ...(query.startDate ? { gte: query.startDate } : {}),
+        ...(query.endDate ? { lte: query.endDate } : {})
+      }
+    } : {})
   };
   const [items, total] = await prisma.$transaction([
     prisma.sale.findMany({

@@ -10,6 +10,7 @@ import { homeRouter } from './routes/home.js';
 import { clientsRouter } from './routes/clients.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { salesRouter } from './routes/sales.js';
+import { dashboardRouter } from './routes/dashboard.js';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/sales', salesRouter);
+app.use('/api/dashboard', dashboardRouter);
 app.use(errorHandler);
 
 const server = app.listen(config.PORT, () => {

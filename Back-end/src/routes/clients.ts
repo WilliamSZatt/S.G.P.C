@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
-import { isValidCpf } from '../lib/validation.js';
+import { digitsOnly, isValidCpf } from '../lib/validation.js';
 
 const router = Router();
 const clientSchema = z.object({
   name: z.string().trim().min(2),
-  cpf: z.string().trim().optional().refine((value) => !value || isValidCpf(value), 'CPF inválido.'),
-  phone: z.string().trim().optional(),
+  cpf: z.string().trim().refine(isValidCpf, 'CPF inválido.'),
+  phone: z.string().trim().regex(/^\d{10,11}$/, 'Telefone inválido.'),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   status: z.enum(['active', 'inactive']).optional()
 });
@@ -27,10 +27,13 @@ router.get('/', async (request, response) => {
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20)
   }).parse(request.query);
-  const search = query.search ? { OR: [
-    { name: { contains: query.search } },
-    { email: { contains: query.search } },
-    { phone: { contains: query.search } }
+  const searchText = query.search || '';
+  const searchDigits = digitsOnly(searchText);
+  const search = searchText ? { OR: [
+    { name: { contains: searchText } },
+    { email: { contains: searchText } },
+    { phone: { contains: searchDigits || searchText } },
+    { cpf: { contains: searchDigits || searchText } }
   ] } : {};
   const status = query.status === 'all' ? {} : { status: query.status === 'active' ? 'ACTIVE' as const : 'INACTIVE' as const };
   const where = { storeId: request.auth!.storeId, ...search, ...status };
@@ -43,10 +46,27 @@ router.get('/', async (request, response) => {
 
 router.post('/', async (request, response) => {
   const data = clientSchema.parse(request.body);
+  const cpf = digitsOnly(data.cpf);
+  const phone = digitsOnly(data.phone);
+  const [cpfUser, cpfClient, phoneUser, phoneClient] = await Promise.all([
+    prisma.user.findFirst({ where: { storeId: request.auth!.storeId, cpf } }),
+    prisma.client.findFirst({ where: { storeId: request.auth!.storeId, cpf } }),
+    prisma.user.findFirst({ where: { storeId: request.auth!.storeId, phone } }),
+    prisma.client.findFirst({ where: { storeId: request.auth!.storeId, phone } })
+  ]);
+  const errors = [];
+  if (cpfUser || cpfClient) errors.push({ field: 'cpf', message: 'Este CPF já está cadastrado neste comércio.' });
+  if (phoneUser || phoneClient) errors.push({ field: 'phone', message: 'Este telefone já está cadastrado neste comércio.' });
+  if (errors.length) {
+    response.status(409).json({ message: 'Existem dados já cadastrados.', errors });
+    return;
+  }
   try {
     const client = await prisma.client.create({
       data: {
         ...data,
+        cpf,
+        phone,
         status: data.status === 'inactive' ? 'INACTIVE' : 'ACTIVE',
         storeId: request.auth!.storeId,
         createdById: request.auth!.sub
@@ -76,17 +96,34 @@ router.get('/:id', async (request, response) => {
 });
 
 router.patch('/:id', async (request, response) => {
-  const data = clientSchema.partial().parse(request.body);
+  const updateBody = { ...request.body };
+  if (updateBody.cpf === '') delete updateBody.cpf;
+  const data = clientSchema.partial().parse(updateBody);
   const existing = await prisma.client.findFirst({ where: { id: request.params.id, storeId: request.auth!.storeId } });
   if (!existing) {
     response.status(404).json({ message: 'Cliente não encontrado.' });
+    return;
+  }
+  const normalizedCpf = data.cpf ? digitsOnly(data.cpf) : undefined;
+  const normalizedPhone = data.phone ? digitsOnly(data.phone) : undefined;
+  const [cpfUser, cpfClient, phoneUser, phoneClient] = await Promise.all([
+    normalizedCpf ? prisma.user.findFirst({ where: { storeId: request.auth!.storeId, cpf: normalizedCpf } }) : null,
+    normalizedCpf ? prisma.client.findFirst({ where: { storeId: request.auth!.storeId, cpf: normalizedCpf, NOT: { id: existing.id } } }) : null,
+    normalizedPhone ? prisma.user.findFirst({ where: { storeId: request.auth!.storeId, phone: normalizedPhone } }) : null,
+    normalizedPhone ? prisma.client.findFirst({ where: { storeId: request.auth!.storeId, phone: normalizedPhone, NOT: { id: existing.id } } }) : null
+  ]);
+  const duplicateErrors = [];
+  if (cpfUser || cpfClient) duplicateErrors.push({ field: 'cpf', message: 'Este CPF já está cadastrado neste comércio.' });
+  if (phoneUser || phoneClient) duplicateErrors.push({ field: 'phone', message: 'Este telefone já está cadastrado neste comércio.' });
+  if (duplicateErrors.length) {
+    response.status(409).json({ message: 'Existem dados já cadastrados.', errors: duplicateErrors });
     return;
   }
   try {
     const { status, ...fields } = data;
     const client = await prisma.client.update({
       where: { id: existing.id },
-      data: { ...fields, ...(status ? { status: status === 'active' ? 'ACTIVE' : 'INACTIVE' } : {}) },
+      data: { ...fields, ...(normalizedCpf ? { cpf: normalizedCpf } : {}), ...(normalizedPhone ? { phone: normalizedPhone } : {}), ...(status ? { status: status === 'active' ? 'ACTIVE' : 'INACTIVE' } : {}) },
       select: clientSelect
     });
     response.json({ client });

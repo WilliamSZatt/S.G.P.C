@@ -3,11 +3,12 @@ import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
 import { Search, Plus, Edit, X, Check, ChevronLeft, ChevronRight } from '../components/Icons';
 import { api } from '../lib/api';
+import { digitsOnly, formatCpf, formatPhone } from '../lib/formatters';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 type ModalMode = 'new' | 'edit' | 'view' | null;
-type Client = { id: string; name: string; cpf: string; phone: string; email: string; totalSpent: number; lastPurchase: string; status: 'active' | 'inactive'; purchases?: unknown[] };
+type Client = { id: string; name: string; cpf: string | null; phone: string; email: string; totalSpent: number; lastPurchase: string; status: 'active' | 'inactive'; purchases?: unknown[] };
 
 const EMPTY: Omit<Client, 'id' | 'totalSpent' | 'lastPurchase' | 'purchases'> = { name: '', cpf: '', phone: '', email: '', status: 'active' };
 
@@ -26,13 +27,19 @@ export default function Clients() {
   const PER_PAGE = 8;
 
   useEffect(() => {
-    api.get<{ items: Client[] }>('/clients', { params: { limit: 100 } })
+    api.get<{ items: Client[] }>('/clients', { params: { search: search.trim() || undefined, status: statusFilter, limit: 100 } })
       .then(({ data }) => setClients(data.items.map(client => ({ ...client, status: client.status.toLowerCase() as Client['status'], lastPurchase: client.lastPurchase ? new Date(client.lastPurchase).toLocaleDateString('pt-BR') : '—' }))))
       .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar os clientes.' }));
-  }, [showToast]);
+  }, [search, showToast, statusFilter]);
 
   const filtered = clients.filter(c => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+    const query = search.toLowerCase().trim();
+    const digits = digitsOnly(search);
+    const matchSearch = !query
+      || String(c.name || '').toLowerCase().includes(query)
+      || String(c.email || '').toLowerCase().includes(query)
+      || digitsOnly(String(c.phone || '')).includes(digits)
+      || digitsOnly(c.cpf || '').includes(digits);
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -41,13 +48,16 @@ export default function Clients() {
   const visible = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   const openNew = () => { setForm(EMPTY); setErrors({}); setModal('new'); };
-  const openEdit = (c: Client) => { setSelectedClient(c); setForm({ name: c.name, cpf: c.cpf, phone: c.phone, email: c.email, status: c.status }); setErrors({}); setModal('edit'); };
+  const openEdit = (c: Client) => { setSelectedClient(c); setForm({ name: c.name, cpf: c.cpf || '', phone: c.phone, email: c.email, status: c.status }); setErrors({}); setModal('edit'); };
   const openView = (c: Client) => { setSelectedClient(c); setModal('view'); };
   const closeModal = () => { setModal(null); setSelectedClient(null); };
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.name) e.name = 'Nome obrigatório';
+    if (!form.name.trim()) e.name = 'Nome obrigatório';
+    const isLegacyWithoutCpf = modal === 'edit' && !selectedClient?.cpf && !form.cpf.trim();
+    if (!isLegacyWithoutCpf && digitsOnly(form.cpf).length !== 11) e.cpf = 'CPF inválido';
+    if (![10, 11].includes(digitsOnly(form.phone).length)) e.phone = 'Telefone inválido';
     if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'E-mail inválido';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -57,15 +67,21 @@ export default function Clients() {
     if (!validate()) return;
     setSaving(true);
     try {
+      const { cpf, ...formWithoutCpf } = form;
+      const payload = { ...formWithoutCpf, phone: digitsOnly(form.phone), ...(cpf.trim() ? { cpf: digitsOnly(cpf) } : {}) };
       const result = modal === 'new'
-        ? await api.post<{ client: Client }>('/clients', form)
-        : await api.patch<{ client: Client }>(`/clients/${selectedClient?.id}`, form);
+        ? await api.post<{ client: Client }>('/clients', payload)
+        : await api.patch<{ client: Client }>(`/clients/${selectedClient?.id}`, payload);
       const client = { ...result.data.client, status: result.data.client.status.toLowerCase() as Client['status'], lastPurchase: result.data.client.lastPurchase ? new Date(result.data.client.lastPurchase).toLocaleDateString('pt-BR') : '—' };
       setClients(p => modal === 'new' ? [client, ...p] : p.map(item => item.id === client.id ? client : item));
       showToast({ type: 'success', message: modal === 'new' ? 'Cliente cadastrado com sucesso!' : 'Cliente atualizado com sucesso!' });
       closeModal();
-    } catch {
-      setErrors({ submit: 'Não foi possível salvar o cliente.' });
+    } catch (error) {
+      const response = (error as { response?: { data?: { message?: string; errors?: Array<{ field?: string; message?: string }> } } }).response;
+      const serverErrors = response?.data?.errors || [];
+      const fieldErrors = Object.fromEntries(serverErrors.filter(item => item.field).map(item => [item.field, item.message || 'Valor inválido.']));
+      const details = serverErrors.map(item => item.message).filter(Boolean).join(' ') || response?.data?.message;
+      setErrors({ ...fieldErrors, submit: details || 'Não foi possível salvar o cliente.' });
     } finally {
       setSaving(false);
     }
@@ -152,9 +168,9 @@ export default function Clients() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-500 font-mono">{c.cpf}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-500 font-mono">{c.cpf ? formatCpf(c.cpf) : 'Não informado'}</td>
                         <td className="px-4 py-3.5">
-                          <div className="text-sm text-gray-700">{c.phone}</div>
+                          <div className="text-sm text-gray-700">{c.phone ? formatPhone(c.phone) : 'Não informado'}</div>
                           <div className="text-xs text-gray-400">{c.email}</div>
                         </td>
                         <td className="px-4 py-3.5">
@@ -208,10 +224,11 @@ export default function Clients() {
               <button onClick={closeModal} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
             <div className="p-6 space-y-4">
+              {errors.submit && <p className="text-[#C65B42] text-sm">{errors.submit}</p>}
               {[
                 { label: 'Nome completo *', field: 'name', placeholder: 'Nome do cliente', type: 'text' },
-                { label: 'CPF', field: 'cpf', placeholder: '***.***.***-**', type: 'text' },
-                { label: 'Telefone', field: 'phone', placeholder: '(11) 99999-9999', type: 'tel' },
+                { label: modal === 'edit' && !selectedClient?.cpf ? 'CPF (opcional para registro antigo)' : 'CPF *', field: 'cpf', placeholder: '***.***.***-**', type: 'text' },
+                { label: 'Telefone *', field: 'phone', placeholder: '(11) 99999-9999', type: 'tel' },
                 { label: 'E-mail *', field: 'email', placeholder: 'cliente@email.com', type: 'email' },
               ].map(({ label, field, placeholder, type }) => (
                 <div key={field}>
@@ -219,7 +236,7 @@ export default function Clients() {
                   <input
                     type={type}
                     value={(form as any)[field]}
-                    onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))}
+                    onChange={e => setForm(p => ({ ...p, [field]: field === 'cpf' ? formatCpf(e.target.value) : field === 'phone' ? formatPhone(e.target.value) : e.target.value }))}
                     placeholder={placeholder}
                     className={inputCls(field)}
                   />
@@ -263,7 +280,7 @@ export default function Clients() {
                 </div>
               </div>
               <div className="space-y-3 bg-[#F6F7F8] rounded-xl p-4">
-                {[['CPF', selectedClient.cpf], ['Telefone', selectedClient.phone], ['E-mail', selectedClient.email], ['Total gasto', fmt(selectedClient.totalSpent)], ['Última compra', selectedClient.lastPurchase]].map(([k, v]) => (
+                {[['CPF', selectedClient.cpf ? formatCpf(selectedClient.cpf) : 'Não informado'], ['Telefone', selectedClient.phone ? formatPhone(selectedClient.phone) : 'Não informado'], ['E-mail', selectedClient.email], ['Total gasto', fmt(selectedClient.totalSpent)], ['Última compra', selectedClient.lastPurchase]].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm">
                     <span className="text-gray-500">{k}</span>
                     <span className="font-medium text-gray-800">{v}</span>

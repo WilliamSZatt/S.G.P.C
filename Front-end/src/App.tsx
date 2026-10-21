@@ -9,7 +9,6 @@ import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import StockPage from './pages/StockPage';
 import POSPage from './pages/POSPage';
-import FiscalCenter from './pages/FiscalCenter';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
@@ -41,7 +40,6 @@ function AppContent() {
   if (currentPage === 'clients') return <Clients />;
   if (currentPage === 'stock') return <StockPage />;
   if (currentPage === 'pos') return <POSPage />;
-  if (currentPage === 'fiscal') return isAdmin ? <FiscalCenter /> : <Unauthorized />;
   if (currentPage === 'reports') return isAdmin ? <Reports /> : <Unauthorized />;
   if (currentPage === 'users') return isAdmin ? <Users /> : <Unauthorized />;
   if (currentPage === 'settings') return <Settings />;

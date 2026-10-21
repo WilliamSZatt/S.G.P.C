@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
-import { Check, X } from '../components/Icons';
+import { Check } from '../components/Icons';
 import { api } from '../lib/api';
+import { SETTINGS_CHANGED_EVENT } from '../lib/notifications';
 
-const TABS_ADMIN = ['Dados do comércio', 'Perfil do admin', 'PDV', 'Estoque', 'Notificações', 'Integrações'];
+const TABS_ADMIN = ['Dados do comércio', 'Perfil do admin', 'PDV', 'Estoque', 'Notificações'];
+const SETTINGS_KEY = 'sgpc_settings';
 
 type StoreData = {
   document: string;
@@ -59,25 +61,39 @@ export default function Settings() {
     stockCritical: true,
     saleDone: true,
     paymentFail: true,
-    fiscalDoc: false,
-    das: true,
     userChanged: true,
     passwordRecovery: false,
   });
 
   const [pdvSettings, setPdvSettings] = useState({
-    requireClient: false,
+    requireClient: true,
     allowDiscount: true,
     printReceipt: false,
     stockWarning: true,
   });
+  const [stockSettings, setStockSettings] = useState({ defaultMinStock: '10', warningPercentage: '20' });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed.notifSettings) setNotifSettings(p => ({ ...p, ...parsed.notifSettings }));
+      if (parsed.pdvSettings) setPdvSettings(p => ({ ...p, ...parsed.pdvSettings }));
+      if (parsed.stockSettings) setStockSettings(p => ({ ...p, ...parsed.stockSettings }));
+    } catch {
+      localStorage.removeItem(SETTINGS_KEY);
+    }
+  }, []);
 
   const handleSave = () => {
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      showToast({ type: 'success', message: 'Configurações salvas com sucesso!' });
-    }, 1000);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ notifSettings, pdvSettings, stockSettings }));
+    window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, {
+      detail: { notifSettings, pdvSettings, stockSettings }
+    }));
+    setSaving(false);
+    showToast({ type: 'success', message: 'Configurações salvas com sucesso!' });
   };
 
   const inpCls = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]';
@@ -185,11 +201,11 @@ export default function Settings() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">Estoque mínimo padrão (novas entradas)</label>
-                  <input type="number" defaultValue="10" className={inpCls} />
+                  <input type="number" min="0" value={stockSettings.defaultMinStock} onChange={e => setStockSettings(p => ({ ...p, defaultMinStock: e.target.value }))} className={inpCls} />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">Alertar quando estoque atingir (%)</label>
-                  <input type="number" defaultValue="20" className={inpCls} />
+                  <input type="number" min="0" max="100" value={stockSettings.warningPercentage} onChange={e => setStockSettings(p => ({ ...p, warningPercentage: e.target.value }))} className={inpCls} />
                   <p className="text-xs text-gray-400 mt-1">Exemplo: 20% do estoque mínimo dispara o alerta.</p>
                 </div>
               </div>
@@ -206,8 +222,6 @@ export default function Settings() {
                   { label: 'Venda concluída', desc: 'Notificar a cada venda finalizada.', field: 'saleDone' },
                   { label: 'Falha de pagamento', desc: 'Alertar sobre erros no processamento.', field: 'paymentFail' },
                   ...(isAdmin ? [
-                    { label: 'Documento demonstrativo', desc: 'Novos documentos fiscais disponíveis.', field: 'fiscalDoc' },
-                    { label: 'DAS demonstrativo', desc: 'Vencimento do DAS se aproximando.', field: 'das' },
                     { label: 'Usuário alterado', desc: 'Mudanças em usuários do sistema.', field: 'userChanged' },
                   ] : []),
                 ].map(({ label, desc, field }) => (
@@ -223,35 +237,8 @@ export default function Settings() {
             </div>
           ) : null}
 
-          {/* Integrations */}
-          {tab === 5 && isAdmin && (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-              <h3 className="font-display font-semibold text-[#1F2926] mb-2">Integrações</h3>
-              <p className="text-sm text-gray-500 mb-5">Conecte ferramentas externas ao ComércioOS.</p>
-              <div className="space-y-3">
-                {[
-                  { name: 'SEFAZ / NFC-e', desc: 'Emissão de nota fiscal eletrônica', status: 'Futuro' },
-                  { name: 'TEF / Máquina de cartão', desc: 'Integração com terminais de pagamento', status: 'Futuro' },
-                  { name: 'WhatsApp Business', desc: 'Envio de comprovantes e notificações', status: 'Futuro' },
-                  { name: 'Google Sheets', desc: 'Exportação automática de relatórios', status: 'Demonstrativo' },
-                  { name: 'E-mail SMTP', desc: 'Envio de e-mails transacionais', status: 'Não configurado' },
-                ].map(item => (
-                  <div key={item.name} className="flex items-center justify-between p-4 border border-gray-200 rounded-xl">
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">{item.name}</div>
-                      <div className="text-xs text-gray-500">{item.desc}</div>
-                    </div>
-                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${item.status === 'Demonstrativo' ? 'bg-[#4D7CA8]/10 text-[#4D7CA8]' : item.status === 'Não configurado' ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-700'}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Save button */}
-          {tab < 5 && (
+          {((isAdmin && tab >= 2) || (!isAdmin && tab === 1)) && (
             <div className="mt-5">
               <button onClick={handleSave} disabled={saving} className="bg-[#E8753D] text-white font-semibold px-6 py-2.5 rounded-xl hover:bg-[#d4662e] transition-colors disabled:opacity-70 flex items-center gap-2">
                 {saving ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Salvando...</> : <><Check size={16} />Salvar configurações</>}

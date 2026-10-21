@@ -1,29 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp, Page } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
 import { Bell, Check, AlertTriangle, Info, X } from '../components/Icons';
-
-type Notif = { id: string; type: string; title: string; message: string; date: string; read: boolean; link: string };
+import { AppNotification, loadNotifications, markAllNotificationsRead, markNotificationRead, SETTINGS_CHANGED_EVENT } from '../lib/notifications';
 
 export default function Notifications() {
   const { currentUser, navigate, showToast } = useApp();
-  const raw: Notif[] = [];
-
-  const [notifs, setNotifs] = useState<Notif[]>(raw);
+  const [notifs, setNotifs] = useState<AppNotification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   const displayed = filter === 'unread' ? notifs.filter(n => !n.read) : notifs;
   const unreadCount = notifs.filter(n => !n.read).length;
 
-  const markRead = (id: string) => setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n));
+  useEffect(() => {
+    const refreshNotifications = () => {
+      loadNotifications().then(setNotifs).catch(() => setNotifs([]));
+    };
+    refreshNotifications();
+    window.addEventListener(SETTINGS_CHANGED_EVENT, refreshNotifications);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, refreshNotifications);
+  }, [currentUser?.id]);
+
+  const markRead = (id: string) => {
+    markNotificationRead(id);
+    setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n));
+  };
   const markAllRead = () => {
+    markAllNotificationsRead(notifs);
     setNotifs(p => p.map(n => ({ ...n, read: true })));
     showToast({ type: 'success', message: 'Todas as notificações marcadas como lidas.' });
   };
 
-  const handleOpen = (n: Notif) => {
+  const handleOpen = (n: AppNotification) => {
     markRead(n.id);
-    navigate(n.link as Page);
+    navigate(n.link === 'reports' && currentUser?.role !== 'admin' ? 'pos' : n.link as Page);
   };
 
   const typeIcon = (type: string) => {

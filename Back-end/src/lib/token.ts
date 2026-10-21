@@ -14,6 +14,6 @@ export const createAccessToken = (payload: AuthTokenPayload) =>
 export const verifyAccessToken = (token: string) =>
   jwt.verify(token, config.JWT_SECRET) as AuthTokenPayload;
 
-export const createOpaqueToken = () => crypto.randomBytes(32).toString('hex');
+export const createOpaqueToken = () => String(crypto.randomInt(100000, 1000000));
 export const hashOpaqueToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex');

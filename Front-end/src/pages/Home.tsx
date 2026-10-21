@@ -8,7 +8,6 @@ const FAQ_ITEMS = [
   { q: 'Meus dados ficam seguros?', a: 'Sim. Utilizamos criptografia em todos os dados e seguimos as diretrizes da LGPD. Seus dados nunca são compartilhados com terceiros.' },
   { q: 'Posso usar no celular?', a: 'Sim, o sistema é responsivo e funciona em dispositivos móveis. O PDV foi especialmente otimizado para uso em tablets.' },
   { q: 'Quantos usuários posso cadastrar?', a: 'Depende do plano contratado. No plano demonstrativo, você pode cadastrar até 5 usuários com diferentes perfis de acesso.' },
-  { q: 'O sistema emite nota fiscal?', a: 'A integração fiscal é demonstrativa neste protótipo. A emissão real de NFC-e e NF-e é planejada para versões futuras.' },
 ];
 
 const FEATURES = [
@@ -16,7 +15,6 @@ const FEATURES = [
   { icon: '📦', title: 'Controle de Estoque', desc: 'Acompanhe entradas, saídas e receba alertas de produtos com estoque crítico.' },
   { icon: '👥', title: 'Gestão de Clientes', desc: 'Cadastre clientes, acompanhe o histórico de compras e fidelize seu público.' },
   { icon: '📊', title: 'Relatórios Gerenciais', desc: 'Analise receitas, despesas e indicadores de desempenho em tempo real.' },
-  { icon: '🧾', title: 'Centro Fiscal', desc: 'Acompanhe competências, DAS demonstrativo e documentos fiscais em um só lugar.' },
   { icon: '👤', title: 'Controle de Acesso', desc: 'Defina permissões por perfil: Administrador/Gerente e Operador/Funcionário.' },
 ];
 
@@ -35,9 +33,9 @@ const SERVICES = [
   },
   {
     icon: '📋',
-    title: 'Gestão Fiscal Integrada',
-    desc: 'Acompanhamento de competências, cálculo demonstrativo do Simples Nacional e organização de documentos fiscais.',
-    tags: ['Fiscal', 'DAS', 'NFC-e'],
+    title: 'Gestão comercial integrada',
+    desc: 'Centralize vendas, clientes, estoque e relatórios em uma única plataforma.',
+    tags: ['Vendas', 'Estoque', 'Relatórios'],
   },
   {
     icon: '📈',
@@ -282,7 +280,7 @@ export default function Home() {
               { icon: '⚡', title: 'Agilidade no atendimento', desc: 'PDV otimizado para velocidade no balcão.' },
               { icon: '📦', title: 'Controle de estoque', desc: 'Alertas automáticos de produtos críticos.' },
               { icon: '📊', title: 'Clareza dos dados', desc: 'Relatórios claros e indicadores em tempo real.' },
-              { icon: '🔗', title: 'Centralização total', desc: 'Vendas, clientes e fiscal em um só lugar.' },
+              { icon: '🔗', title: 'Centralização total', desc: 'Vendas, clientes, estoque e relatórios em um só lugar.' },
             ].map(item => (
               <div key={item.title} className="text-center">
                 <div className="text-3xl mb-3">{item.icon}</div>
@@ -452,7 +450,7 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { name: 'Básico', price: 'Demonstrativo', features: ['PDV completo', 'Até 3 usuários', 'Estoque ilimitado', 'Relatórios básicos'], highlight: false },
-              { name: 'Profissional', price: 'Demonstrativo', features: ['PDV completo', 'Usuários ilimitados', 'Centro Fiscal', 'Relatórios avançados', 'Suporte prioritário'], highlight: true },
+              { name: 'Profissional', price: 'Demonstrativo', features: ['PDV completo', 'Usuários ilimitados', 'Gestão de estoque', 'Relatórios avançados', 'Suporte prioritário'], highlight: true },
               { name: 'Empresarial', price: 'Demonstrativo', features: ['Tudo do Profissional', 'Multi-loja', 'API de integração', 'Treinamento dedicado', 'SLA garantido'], highlight: false },
             ].map(plan => (
               <div key={plan.name} className={`rounded-2xl p-6 border ${plan.highlight ? 'bg-[#1F2926] border-[#1F2926] text-white' : 'bg-white border-gray-100'}`}>

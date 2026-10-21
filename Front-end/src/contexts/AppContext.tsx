@@ -14,7 +14,7 @@ export type Page =
   | 'home' | 'login' | 'register' | 'onboarding'
   | 'forgot-password' | 'verify-email' | 'reset-password' | 'reset-success'
   | 'dashboard' | 'clients' | 'stock' | 'pos'
-  | 'fiscal' | 'reports' | 'users' | 'settings'
+  | 'reports' | 'users' | 'settings'
   | 'notifications' | 'unauthorized' | 'logout-confirm';
 
 export interface ToastMessage {
@@ -37,7 +37,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const ADMIN_ONLY: Page[] = ['dashboard', 'fiscal', 'reports', 'users', 'settings'];
+const ADMIN_ONLY: Page[] = ['dashboard', 'reports', 'users', 'settings'];
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);

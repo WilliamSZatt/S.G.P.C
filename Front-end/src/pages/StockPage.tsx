@@ -3,11 +3,14 @@ import { useApp } from '../contexts/AppContext';
 import AuthLayout from '../components/AuthLayout';
 import { Search, Plus, Edit, X, AlertTriangle, Filter } from '../components/Icons';
 import { api } from '../lib/api';
+import { digitsOnly } from '../lib/formatters';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const CATEGORIES = ['Todos', 'Grãos', 'Laticínios', 'Mercearia', 'Massas', 'Conservas', 'Bebidas', 'Limpeza', 'Snacks', 'Carnes'];
 type Product = { id: string; name: string; description: string; sku: string; ean?: string; category: string; price: number; quantity: number; minStock: number; status: 'active' | 'inactive' };
+type ProductField = 'name' | 'description' | 'sku' | 'ean' | 'category' | 'price' | 'quantity' | 'minStock' | 'status';
+type MovementField = 'qty' | 'reason' | 'notes';
 
 function stockStatus(p: Product): { label: string; cls: string } {
   if (p.status === 'inactive') return { label: 'Inativo', cls: 'bg-gray-100 text-gray-500' };
@@ -28,7 +31,9 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({ name: '', description: '', sku: '', ean: '', category: 'Grãos', price: '', quantity: '', minStock: '10', status: 'active' });
+  const [formErrors, setFormErrors] = useState<Partial<Record<ProductField, string>>>({});
   const [movForm, setMovForm] = useState({ qty: '', reason: '', notes: '' });
+  const [movErrors, setMovErrors] = useState<Partial<Record<MovementField, string>>>({});
 
   const loadProducts = () => api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'all' } })
     .then(({ data }) => setProducts(data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] }))));
@@ -39,19 +44,37 @@ export default function StockPage() {
 
   const filtered = products.filter(p => {
     const q = search.toLowerCase();
-    const matchSearch = !search || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.ean || '').includes(q);
+    const matchSearch = !search || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.ean || '').includes(digitsOnly(search)) || p.category.toLowerCase().includes(q);
     const matchCat = category === 'Todos' || p.category === category;
     const matchStatus = statusFilter === 'all' || (statusFilter === 'active' && p.status === 'active') || (statusFilter === 'inactive' && p.status === 'inactive') || (statusFilter === 'low' && p.quantity > 0 && p.quantity < p.minStock) || (statusFilter === 'out' && p.quantity === 0);
     return matchSearch && matchCat && matchStatus;
   });
 
   const openDetail = (p: Product) => { setSelected(p); setModal('detail'); };
-  const openEdit = (p: Product) => { setSelected(p); setForm({ name: p.name, description: p.description, sku: p.sku, ean: p.ean || '', category: p.category, price: String(p.price), quantity: String(p.quantity), minStock: String(p.minStock), status: p.status }); setModal('edit'); };
-  const openNew = () => { setForm({ name: '', description: '', sku: '', ean: '', category: 'Grãos', price: '', quantity: '', minStock: '10', status: 'active' }); setModal('new'); };
-  const openMov = (p: Product, type: 'entrada' | 'baixa' | 'ajuste') => { setSelected(p); setMovForm({ qty: '', reason: '', notes: '' }); setModal(type); };
+  const openEdit = (p: Product) => { setSelected(p); setForm({ name: p.name, description: p.description, sku: p.sku, ean: p.ean || '', category: p.category, price: String(p.price), quantity: String(p.quantity), minStock: String(p.minStock), status: p.status }); setFormErrors({}); setModal('edit'); };
+  const openNew = () => { setForm({ name: '', description: '', sku: '', ean: '', category: 'Grãos', price: '', quantity: '', minStock: '10', status: 'active' }); setFormErrors({}); setModal('new'); };
+  const openMov = (p: Product, type: 'entrada' | 'baixa' | 'ajuste') => { setSelected(p); setMovForm({ qty: '', reason: '', notes: '' }); setMovErrors({}); setModal(type); };
   const closeModal = () => { setModal(null); setSelected(null); };
 
   const handleSaveProduct = async () => {
+    const errors: Partial<Record<ProductField, string>> = {};
+    if (!form.name.trim()) errors.name = 'Informe o nome do produto.';
+    if (!form.description.trim()) errors.description = 'Informe a descrição do produto.';
+    if (!form.sku.trim()) errors.sku = 'Informe o código interno do produto.';
+    if (!form.ean.trim()) errors.ean = 'Informe o código de barras.';
+    else if (!/^\d{8}(\d{5})?$/.test(digitsOnly(form.ean))) errors.ean = 'O código de barras deve ter 8 ou 13 números.';
+    if (!form.category.trim()) errors.category = 'Selecione uma categoria.';
+    if (!form.price.trim()) errors.price = 'Informe o preço do produto.';
+    else if (!Number.isFinite(Number(form.price)) || Number(form.price) <= 0) errors.price = 'O preço deve ser maior que zero.';
+    if (!form.quantity.trim()) errors.quantity = 'Informe a quantidade em estoque.';
+    else if (!Number.isFinite(Number(form.quantity)) || Number(form.quantity) < 0) errors.quantity = 'A quantidade não pode ser negativa.';
+    if (!form.minStock.trim()) errors.minStock = 'Informe o estoque mínimo.';
+    else if (!Number.isFinite(Number(form.minStock)) || Number(form.minStock) < 0) errors.minStock = 'O estoque mínimo não pode ser negativo.';
+    if (!form.status.trim()) errors.status = 'Selecione um status.';
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...form, price: Number(form.price), quantity: Number(form.quantity), minStock: Number(form.minStock) };
@@ -68,11 +91,19 @@ export default function StockPage() {
   };
 
   const handleMovimento = async (type: 'entrada' | 'baixa' | 'ajuste') => {
-    const qty = parseInt(movForm.qty) || 0;
-    if (!qty) return;
+    const errors: Partial<Record<MovementField, string>> = {};
+    const qty = Number(movForm.qty);
+    if (!movForm.qty.trim()) errors.qty = 'Informe a quantidade.';
+    else if (!Number.isInteger(qty) || qty <= 0) errors.qty = 'Informe uma quantidade inteira maior que zero.';
+    if (!movForm.reason.trim()) errors.reason = type === 'entrada' ? 'Informe a origem da entrada.' : 'Informe o motivo da movimentação.';
+    if (!movForm.notes.trim()) errors.notes = 'Informe uma observação.';
+    setMovErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
     setSaving(true);
     try {
-      await api.post(`/inventory/products/${selected?.id}/movements`, { type, quantity: qty, reason: movForm.reason, notes: movForm.notes });
+      await api.post(`/inventory/products/${selected?.id}/movements`, { type, quantity: qty, reason: movForm.reason.trim(), notes: movForm.notes.trim() });
       await loadProducts();
       showToast({ type: 'success', message: `Movimentação registrada com sucesso!` });
       closeModal();
@@ -110,7 +141,7 @@ export default function StockPage() {
         <div className="flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-48">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome, SKU ou código..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nome, descrição, código ou categoria..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]" />
           </div>
           <select value={category} onChange={e => setCategory(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D] bg-white">
             {CATEGORIES.map(c => <option key={c}>{c}</option>)}
@@ -143,7 +174,7 @@ export default function StockPage() {
               <table className="w-full">
                 <thead className="bg-[#F6F7F8] border-b border-gray-100">
                   <tr>
-                    {['Produto', 'SKU', 'Categoria', 'Preço', 'Estoque', 'Status', 'Ações'].map(h => (
+                    {['Produto', 'Código interno', 'Categoria', 'Preço', 'Estoque', 'Status', 'Ações'].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
@@ -198,7 +229,7 @@ export default function StockPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-[#F6F7F8] rounded-xl p-4 space-y-3">
-                {[['Nome', selected.name], ['Descrição', selected.description], ['SKU', selected.sku], ['EAN/GTIN', selected.ean || '—'], ['Categoria', selected.category], ['Preço', fmt(selected.price)], ['Quantidade', `${selected.quantity} unidades`], ['Estoque mínimo', `${selected.minStock} unidades`]].map(([k, v]) => (
+                {[['Nome', selected.name], ['Descrição', selected.description], ['Código interno', selected.sku], ['Código de barras', selected.ean || '—'], ['Categoria', selected.category], ['Preço', fmt(selected.price)], ['Quantidade', `${selected.quantity} unidades`], ['Estoque mínimo', `${selected.minStock} unidades`]].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm">
                     <span className="text-gray-500">{k}</span>
                     <span className="font-medium text-gray-800 text-right max-w-[200px]">{v}</span>
@@ -231,41 +262,49 @@ export default function StockPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {[
                 { label: 'Nome *', field: 'name', placeholder: 'Nome do produto' },
-                { label: 'Descrição', field: 'description', placeholder: 'Descrição breve' },
-                { label: 'SKU *', field: 'sku', placeholder: 'ARR-001' },
-                { label: 'EAN/GTIN (opcional)', field: 'ean', placeholder: '7891000000000' },
+                { label: 'Descrição *', field: 'description', placeholder: 'Descrição breve' },
+                { label: 'Código interno do produto *', field: 'sku', placeholder: 'Ex.: ARR-001' },
+                { label: 'Código de barras (EAN/GTIN) *', field: 'ean', placeholder: 'Ex.: 7891000000000' },
               ].map(({ label, field, placeholder }) => (
                 <div key={field}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-                  <input value={(form as any)[field]} onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))} placeholder={placeholder} className={inpCls} />
+                  <input required maxLength={field === 'ean' ? 13 : undefined} inputMode={field === 'ean' ? 'numeric' : undefined} value={(form as any)[field]} onChange={e => { const value = field === 'ean' ? digitsOnly(e.target.value).slice(0, 13) : e.target.value; setForm(p => ({ ...p, [field]: value })); setFormErrors(p => ({ ...p, [field]: undefined })); }} placeholder={placeholder} className={`${inpCls} ${formErrors[field as ProductField] ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                  {formErrors[field as ProductField] && <p className="text-xs text-red-600 mt-1">{formErrors[field as ProductField]}</p>}
+                  {field === 'sku' && <p className="text-xs text-gray-400 mt-1">Código criado por você para identificar o produto dentro da loja.</p>}
+                  {field === 'ean' && <p className="text-xs text-gray-400 mt-1">Número do código de barras que vem na embalagem. Digite somente números.</p>}
                 </div>
               ))}
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">Categoria</label>
-                <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className={inpCls}>
+                <select value={form.category} onChange={e => { setForm(p => ({ ...p, category: e.target.value })); setFormErrors(p => ({ ...p, category: undefined })); }} className={`${inpCls} ${formErrors.category ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`}>
                   {CATEGORIES.slice(1).map(c => <option key={c}>{c}</option>)}
                 </select>
+                {formErrors.category && <p className="text-xs text-red-600 mt-1">{formErrors.category}</p>}
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">Preço (R$)</label>
-                  <input type="number" step="0.01" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0,00" className={inpCls} />
+                  <input type="number" step="0.01" value={form.price} onChange={e => { setForm(p => ({ ...p, price: e.target.value })); setFormErrors(p => ({ ...p, price: undefined })); }} placeholder="0,00" className={`${inpCls} ${formErrors.price ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                  {formErrors.price && <p className="text-xs text-red-600 mt-1">{formErrors.price}</p>}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">Quantidade</label>
-                  <input type="number" value={form.quantity} onChange={e => setForm(p => ({ ...p, quantity: e.target.value }))} placeholder="0" className={inpCls} />
+                  <input type="number" value={form.quantity} onChange={e => { setForm(p => ({ ...p, quantity: e.target.value })); setFormErrors(p => ({ ...p, quantity: undefined })); }} placeholder="0" className={`${inpCls} ${formErrors.quantity ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                  {formErrors.quantity && <p className="text-xs text-red-600 mt-1">{formErrors.quantity}</p>}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">Mínimo</label>
-                  <input type="number" value={form.minStock} onChange={e => setForm(p => ({ ...p, minStock: e.target.value }))} placeholder="10" className={inpCls} />
+                  <input type="number" value={form.minStock} onChange={e => { setForm(p => ({ ...p, minStock: e.target.value })); setFormErrors(p => ({ ...p, minStock: undefined })); }} placeholder="10" className={`${inpCls} ${formErrors.minStock ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                  {formErrors.minStock && <p className="text-xs text-red-600 mt-1">{formErrors.minStock}</p>}
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">Status</label>
-                <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className={inpCls}>
+                <select value={form.status} onChange={e => { setForm(p => ({ ...p, status: e.target.value })); setFormErrors(p => ({ ...p, status: undefined })); }} className={`${inpCls} ${formErrors.status ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`}>
                   <option value="active">Ativo</option>
                   <option value="inactive">Inativo</option>
                 </select>
+                {formErrors.status && <p className="text-xs text-red-600 mt-1">{formErrors.status}</p>}
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
@@ -298,20 +337,27 @@ export default function StockPage() {
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">
                   {modal === 'ajuste' ? 'Nova quantidade total' : 'Quantidade'}
                 </label>
-                <input type="number" value={movForm.qty} onChange={e => setMovForm(p => ({ ...p, qty: e.target.value }))} placeholder="0" className={inpCls} />
+                <input type="number" min="1" step="1" value={movForm.qty} onChange={e => { setMovForm(p => ({ ...p, qty: e.target.value })); setMovErrors(p => ({ ...p, qty: undefined })); }} placeholder="0" className={`${inpCls} ${movErrors.qty ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                {movErrors.qty && <p className="text-xs text-red-600 mt-1">{movErrors.qty}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">
-                  {modal === 'baixa' ? 'Motivo da baixa *' : modal === 'ajuste' ? 'Justificativa *' : 'Observações'}
+                  {modal === 'entrada' ? 'Origem da entrada *' : modal === 'baixa' ? 'Motivo da baixa *' : 'Justificativa *'}
                 </label>
-                <input value={movForm.reason} onChange={e => setMovForm(p => ({ ...p, reason: e.target.value }))} placeholder={modal === 'entrada' ? 'Compra de fornecedor, devolução...' : 'Vencimento, perda, furto...'} className={inpCls} />
+                <input value={movForm.reason} onChange={e => { setMovForm(p => ({ ...p, reason: e.target.value })); setMovErrors(p => ({ ...p, reason: undefined })); }} placeholder={modal === 'entrada' ? 'Compra de fornecedor, devolução...' : 'Vencimento, perda, furto...'} className={`${inpCls} ${movErrors.reason ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                {movErrors.reason && <p className="text-xs text-red-600 mt-1">{movErrors.reason}</p>}
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Observações *</label>
+                <input value={movForm.notes} onChange={e => { setMovForm(p => ({ ...p, notes: e.target.value })); setMovErrors(p => ({ ...p, notes: undefined })); }} placeholder="Descreva a movimentação" className={`${inpCls} ${movErrors.notes ? 'border-red-400 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                {movErrors.notes && <p className="text-xs text-red-600 mt-1">{movErrors.notes}</p>}
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
               <button onClick={closeModal} className="flex-1 border border-gray-200 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">Cancelar</button>
               <button
                 onClick={() => handleMovimento(modal as any)}
-                disabled={saving || !movForm.qty}
+                disabled={saving}
                 className={`flex-1 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-70 flex items-center justify-center gap-2 ${modal === 'entrada' ? 'bg-[#4F8B69] hover:bg-[#3d6e54]' : modal === 'baixa' ? 'bg-[#C65B42] hover:bg-[#a84836]' : 'bg-[#4D7CA8] hover:bg-[#3e6389]'}`}
               >
                 {saving ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : null}

@@ -1,21 +1,18 @@
-import { ReactNode, useState, useRef, useEffect } from 'react';
+import { ReactNode, useState, useRef, useEffect, useCallback } from 'react';
 import { useApp, Page } from '../contexts/AppContext';
 import Sidebar from './Sidebar';
 import { Bell, Menu, X, Check, AlertTriangle, Info, Settings, LogOut } from './Icons';
+import { AppNotification, loadNotifications, markAllNotificationsRead, markNotificationRead, SETTINGS_CHANGED_EVENT } from '../lib/notifications';
 
 interface Props {
   children: ReactNode;
   title?: string;
 }
 
-type Notif = { id: string; type: string; title: string; message: string; date: string; read: boolean; link: string };
-
 export default function AuthLayout({ children, title }: Props) {
   const { currentUser, navigate, setSidebarOpen, sidebarOpen } = useApp();
   const isAdmin = currentUser?.role === 'admin';
-  const raw: Notif[] = [];
-
-  const [notifs, setNotifs] = useState<Notif[]>(raw);
+  const [notifs, setNotifs] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -25,6 +22,16 @@ export default function AuthLayout({ children, title }: Props) {
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const unread = notifs.filter(n => !n.read).length;
+
+  const refreshNotifications = useCallback(() => {
+    loadNotifications().then(setNotifs).catch(() => setNotifs([]));
+  }, []);
+
+  useEffect(() => {
+    refreshNotifications();
+    window.addEventListener(SETTINGS_CHANGED_EVENT, refreshNotifications);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, refreshNotifications);
+  }, [currentUser?.id, refreshNotifications]);
 
   // Close notifications on outside click
   useEffect(() => {
@@ -52,13 +59,19 @@ export default function AuthLayout({ children, title }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, [profileOpen]);
 
-  const markRead = (id: string) => setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n));
-  const markAllRead = () => setNotifs(p => p.map(n => ({ ...n, read: true })));
+  const markRead = (id: string) => {
+    markNotificationRead(id);
+    setNotifs(p => p.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+  const markAllRead = () => {
+    markAllNotificationsRead(notifs);
+    setNotifs(p => p.map(n => ({ ...n, read: true })));
+  };
 
-  const handleOpen = (n: Notif) => {
+  const handleOpen = (n: AppNotification) => {
     markRead(n.id);
     setOpen(false);
-    navigate(n.link as Page);
+    navigate(n.link === 'reports' && !isAdmin ? 'pos' : n.link as Page);
   };
 
   return (
@@ -88,7 +101,10 @@ export default function AuthLayout({ children, title }: Props) {
             <div className="relative">
               <button
                 ref={bellRef}
-                onClick={() => setOpen(o => !o)}
+                onClick={() => {
+                  refreshNotifications();
+                  setOpen(o => !o);
+                }}
                 className={`relative p-2 rounded-lg transition-colors ${open ? 'bg-gray-100 text-[#1F2926]' : 'hover:bg-gray-100 text-gray-600'}`}
               >
                 <Bell size={20} />

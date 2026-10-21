@@ -5,8 +5,9 @@ import { hashPassword, comparePassword } from '../lib/password.js';
 import { createAccessToken, createOpaqueToken, hashOpaqueToken } from '../lib/token.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/roles.js';
 import { notifyPasswordReset } from '../services/password-reset.js';
-import { isAdultBirthDate, isValidCpfOrCnpj } from '../lib/validation.js';
+import { digitsOnly, isAdultBirthDate, isValidCpf, isValidCpfOrCnpj } from '../lib/validation.js';
 
 const router = Router();
 const email = z.string().trim().email().transform((value) => value.toLowerCase());
@@ -41,11 +42,31 @@ const registerSchema = z.object({
 
 const loginSchema = z.object({ email, password: z.string().min(1), remember: z.boolean().optional() });
 const requestResetSchema = z.object({ email });
-const resetSchema = z.object({ token: z.string().min(1), password, confirmPassword: z.string().min(1) })
+const resetSchema = z.object({
+  token: z.string().trim().regex(/^\d{6}$/, 'O código deve ter 6 dígitos.'),
+  password,
+  confirmPassword: z.string().min(1)
+})
   .refine((data) => data.password === data.confirmPassword, {
     message: 'As senhas não coincidem.',
     path: ['confirmPassword']
   });
+  const teamUserSchema = z.object({
+    name: z.string().trim().min(2),
+    cpf: z.string().trim().refine(isValidCpf, 'CPF inválido.'),
+    phone: z.string().trim().regex(/^\d{10,11}$/, 'Telefone inválido.'),
+    birthDate: z.string().refine(isAdultBirthDate, 'A idade deve estar entre 18 e 100 anos.'),
+    email,
+    password,
+    role: z.enum(['admin', 'operator']),
+    status: z.enum(['active', 'inactive']).default('active')
+  });
+const teamUpdateSchema = teamUserSchema.extend({
+    cpf: z.string().trim().refine(isValidCpf, 'CPF inválido.').optional(),
+    phone: z.string().trim().regex(/^\d{10,11}$/, 'Telefone inválido.').optional(),
+    birthDate: z.string().refine(isAdultBirthDate, 'A idade deve estar entre 18 e 100 anos.').optional(),
+    password: password.optional()
+});
 
 const publicUser = (user: { id: string; name: string; email: string; role: string; storeId: string }) => ({
   id: user.id,
@@ -160,6 +181,120 @@ router.get('/store', requireAuth, async (request, response) => {
   response.json({ store: storeData, user: users[0] });
 });
 
+router.get('/team', requireAuth, requireAdmin, async (request, response) => {
+  const users = await prisma.user.findMany({
+    where: { storeId: request.auth!.storeId },
+    select: { id: true, name: true, cpf: true, email: true, phone: true, birthDate: true, role: true, active: true, createdAt: true },
+    orderBy: { createdAt: 'asc' }
+  });
+  response.json({ items: users.map((user) => ({ ...user, role: user.role.toLowerCase(), status: user.active ? 'active' : 'inactive' })) });
+});
+
+router.post('/team', requireAuth, requireAdmin, async (request, response) => {
+  const data = teamUserSchema.parse(request.body);
+  const cpf = digitsOnly(data.cpf);
+  const phone = digitsOnly(data.phone);
+  const [cpfUser, cpfClient, phoneUser, phoneClient] = await Promise.all([
+    prisma.user.findFirst({ where: { storeId: request.auth!.storeId, cpf } }),
+    prisma.client.findFirst({ where: { storeId: request.auth!.storeId, cpf } }),
+    prisma.user.findFirst({ where: { storeId: request.auth!.storeId, phone } }),
+    prisma.client.findFirst({ where: { storeId: request.auth!.storeId, phone } })
+  ]);
+  if (cpfUser || cpfClient || phoneUser || phoneClient) {
+    const errors = [];
+    if (cpfUser || cpfClient) errors.push({ field: 'cpf', message: 'Este CPF já está cadastrado neste comércio.' });
+    if (phoneUser || phoneClient) errors.push({ field: 'phone', message: 'Este telefone já está cadastrado neste comércio.' });
+    response.status(409).json({ message: 'Existem dados já cadastrados.', errors });
+    return;
+  }
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name: data.name,
+        cpf,
+        phone,
+        birthDate: new Date(`${data.birthDate}T00:00:00.000Z`),
+        email: data.email,
+        passwordHash: await hashPassword(data.password),
+        role: data.role === 'admin' ? 'ADMIN' : 'OPERATOR',
+        active: data.status === 'active',
+        storeId: request.auth!.storeId
+      },
+      select: { id: true, name: true, cpf: true, email: true, phone: true, birthDate: true, role: true, active: true, createdAt: true }
+    });
+    response.status(201).json({ user: { ...user, role: user.role.toLowerCase(), status: user.active ? 'active' : 'inactive' } });
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') {
+      response.status(409).json({ message: 'E-mail ou CPF já cadastrado neste comércio.' });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.patch('/team/:id/status', requireAuth, requireAdmin, async (request, response) => {
+  const data = z.object({ status: z.enum(['active', 'inactive']) }).parse(request.body);
+  const target = await prisma.user.findFirst({ where: { id: String(request.params.id), storeId: request.auth!.storeId } });
+  if (!target) {
+    response.status(404).json({ message: 'Usuário não encontrado.' });
+    return;
+  }
+  if (target.id === request.auth!.sub && data.status === 'inactive') {
+    response.status(400).json({ message: 'Você não pode desativar a própria conta.' });
+    return;
+  }
+  if (target.id === request.auth!.sub && data.status === 'inactive') {
+    response.status(400).json({ message: 'Você não pode desativar a própria conta.' });
+    return;
+  }
+  const user = await prisma.user.update({ where: { id: target.id }, data: { active: data.status === 'active' }, select: { id: true, active: true } });
+  response.json({ id: user.id, status: user.active ? 'active' : 'inactive' });
+});
+
+router.patch('/team/:id', requireAuth, requireAdmin, async (request, response) => {
+  const data = teamUpdateSchema.parse(request.body);
+  const id = String(request.params.id);
+  const target = await prisma.user.findFirst({ where: { id, storeId: request.auth!.storeId } });
+  if (!target) {
+    response.status(404).json({ message: 'Usuário não encontrado.' });
+    return;
+  }
+
+  const cpf = data.cpf ? digitsOnly(data.cpf) : undefined;
+  const phone = data.phone ? digitsOnly(data.phone) : undefined;
+  const [cpfUser, cpfClient, phoneUser, phoneClient, emailUser] = await Promise.all([
+    cpf ? prisma.user.findFirst({ where: { storeId: target.storeId, cpf, NOT: { id } } }) : null,
+    cpf ? prisma.client.findFirst({ where: { storeId: target.storeId, cpf } }) : null,
+    phone ? prisma.user.findFirst({ where: { storeId: target.storeId, phone, NOT: { id } } }) : null,
+    phone ? prisma.client.findFirst({ where: { storeId: target.storeId, phone } }) : null,
+    prisma.user.findFirst({ where: { email: data.email, NOT: { id } } })
+  ]);
+  const errors = [];
+  if (cpfUser || cpfClient) errors.push({ field: 'cpf', message: 'Este CPF já está cadastrado neste comércio.' });
+  if (phoneUser || phoneClient) errors.push({ field: 'phone', message: 'Este telefone já está cadastrado neste comércio.' });
+  if (emailUser) errors.push({ field: 'email', message: 'Este e-mail já está cadastrado.' });
+  if (errors.length) {
+    response.status(409).json({ message: 'Existem dados já cadastrados.', errors });
+    return;
+  }
+
+  const user = await prisma.user.update({
+    where: { id },
+    data: {
+      name: data.name,
+      ...(cpf ? { cpf } : {}),
+      ...(phone ? { phone } : {}),
+      ...(data.birthDate ? { birthDate: new Date(`${data.birthDate}T00:00:00.000Z`) } : {}),
+      email: data.email,
+      role: data.role === 'admin' ? 'ADMIN' : 'OPERATOR',
+      active: data.status === 'active',
+      ...(data.password ? { passwordHash: await hashPassword(data.password) } : {})
+    },
+    select: { id: true, name: true, cpf: true, email: true, phone: true, birthDate: true, role: true, active: true, createdAt: true }
+  });
+  response.json({ user: { ...user, role: user.role.toLowerCase(), status: user.active ? 'active' : 'inactive' } });
+});
+
 router.delete('/account', requireAuth, async (request, response) => {
   const data = z.object({ password: z.string().min(1) }).parse(request.body);
   const user = await prisma.user.findUnique({ where: { id: request.auth!.sub } });
@@ -177,25 +312,30 @@ router.post('/forgot-password', async (request, response) => {
   const { email: userEmail } = requestResetSchema.parse(request.body);
   const user = await prisma.user.findUnique({ where: { email: userEmail } });
 
-  if (user) {
-    const token = createOpaqueToken();
-    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
-    await prisma.passwordResetToken.create({
-      data: {
-        tokenHash: hashOpaqueToken(token),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + config.PASSWORD_RESET_EXPIRES_IN_MINUTES * 60_000)
-      }
-    });
-    await notifyPasswordReset(user.email, token);
+  if (!user || !user.active) {
+    response.status(404).json({ message: 'Nenhuma conta ativa foi encontrada com este e-mail.' });
+    return;
   }
 
-  response.json({ message: 'Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.' });
+  const token = createOpaqueToken();
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+  await prisma.passwordResetToken.create({
+    data: {
+      tokenHash: hashOpaqueToken(token),
+      userId: user.id,
+      expiresAt: new Date(Date.now() + config.PASSWORD_RESET_EXPIRES_IN_MINUTES * 60_000)
+    }
+  });
+  await notifyPasswordReset(user.email, token);
+
+  response.json({ message: 'Token de recuperação enviado com sucesso.' });
 });
 
 router.post('/reset-password', async (request, response) => {
   const data = resetSchema.parse(request.body);
-  const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashOpaqueToken(data.token) } });
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashOpaqueToken(data.token.trim()) }
+  });
 
   if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
     response.status(400).json({ message: 'Token inválido ou expirado.' });
