@@ -1,7 +1,7 @@
 import { useApp } from '../contexts/AppContext';
 import { Page } from '../contexts/AppContext';
 import {
-  Home, ShoppingCart, Users, Package, BarChart, X,
+  Home, ShoppingCart, Users, Package, BarChart, Store, X,
 } from './Icons';
 
 interface NavItem {
@@ -49,9 +49,11 @@ export default function Sidebar() {
       `}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
-          <div>
-            <div className="font-display font-bold text-lg text-white leading-tight">ComércioOS</div>
-            <div className="text-[10px] text-white/50 mt-0.5 leading-tight truncate max-w-[160px]">Dados do comércio</div>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#E8753D] flex items-center justify-center flex-shrink-0">
+              <Store size={19} className="text-white" />
+            </div>
+            <div className="font-display font-bold text-lg text-white leading-tight truncate">ComércioOS</div>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1">
             <X size={18} />

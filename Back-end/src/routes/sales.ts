@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 const saleSchema = z.object({
-  clientId: z.string().cuid(),
+  clientId: z.string().cuid().optional(),
   discount: z.coerce.number().nonnegative().default(0),
   paymentMethod: z.enum(['dinheiro', 'pix', 'credito', 'debito']),
   cashReceived: z.coerce.number().nonnegative().optional(),
@@ -84,6 +84,22 @@ router.get('/:id', async (request, response) => {
 
 router.post('/', async (request, response) => {
   const data = saleSchema.parse(request.body);
+  const storeSettings = await prisma.store.findUnique({
+    where: { id: request.auth!.storeId },
+    select: { allowDiscount: true, requireClient: true }
+  });
+  if (!storeSettings) {
+    response.status(404).json({ message: 'Comércio não encontrado.' });
+    return;
+  }
+  if (storeSettings.requireClient && !data.clientId) {
+    response.status(400).json({ message: 'Associe um cliente antes de finalizar a venda.' });
+    return;
+  }
+  if (!storeSettings.allowDiscount && data.discount > 0) {
+    response.status(403).json({ message: 'Descontos estão desativados nas configurações do comércio.' });
+    return;
+  }
   if (data.paymentMethod === 'dinheiro' && (data.cashReceived ?? 0) < data.discount) {
     response.status(400).json({ message: 'Valor recebido inválido.' });
     return;

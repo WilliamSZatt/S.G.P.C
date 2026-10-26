@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Check, ChevronDown, Zap } from '../components/Icons';
 
@@ -160,6 +160,41 @@ export default function Home() {
   const { navigate } = useApp();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
+  const [satisfaction, setSatisfaction] = useState(0);
+  const [commerceCount, setCommerceCount] = useState(0);
+  const [salesMillions, setSalesMillions] = useState(0);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      setVisibleSections(previous => {
+        const next = new Set(previous);
+        entries.forEach(entry => {
+          if (entry.isIntersecting) next.add(entry.target.getAttribute('data-reveal') || '');
+        });
+        return next;
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll<HTMLElement>('[data-reveal]').forEach(element => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visibleSections.has('sobre')) return;
+    const startedAt = performance.now();
+    const duration = 1600;
+    const animate = (now: number) => {
+      const progress = Math.min((now - startedAt) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setSatisfaction(Math.round(98 * eased));
+      setCommerceCount(Math.round(2400 * eased));
+      setSalesMillions(Math.round(8 * eased));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [visibleSections.has('sobre')]);
+
+  const reveal = (id: string) => `transition-all duration-700 ${visibleSections.has(id) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`;
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -184,7 +219,7 @@ export default function Home() {
               <button onClick={() => navigate('login')} className="hidden sm:block text-sm font-medium text-[#1F2926] hover:text-[#E8753D] transition-colors">
                 Entrar
               </button>
-              <button onClick={() => navigate('register')} className="bg-[#E8753D] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#d4662e] transition-colors">
+              <button onClick={() => navigate('register')} className="bg-[#E8753D] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#d4662e] hover:-translate-y-0.5 active:translate-y-0 transition-all">
                 Começar agora
               </button>
               <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 text-[#1F2926]">
@@ -205,7 +240,7 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-20 pb-24">
+      <section data-reveal="hero" className={`max-w-6xl mx-auto px-4 sm:px-6 pt-20 pb-24 ${reveal('hero')}`}>
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <div className="inline-flex items-center gap-2 bg-[#4F8B69]/10 text-[#4F8B69] text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
@@ -219,10 +254,10 @@ export default function Home() {
               Centralize vendas, clientes, estoque e resultados em uma única plataforma. Do PDV ao relatório gerencial, tudo integrado.
             </p>
             <div className="flex flex-wrap gap-3">
-              <button onClick={() => navigate('register')} className="bg-[#E8753D] text-white font-semibold px-6 py-3 rounded-xl hover:bg-[#d4662e] transition-colors shadow-lg shadow-[#E8753D]/20">
+              <button onClick={() => navigate('register')} className="bg-[#E8753D] text-white font-semibold px-6 py-3 rounded-xl hover:bg-[#d4662e] hover:-translate-y-1 active:translate-y-0 transition-all shadow-lg shadow-[#E8753D]/20">
                 Começar gratuitamente
               </button>
-              <button onClick={() => scrollTo('funcionalidades')} className="border border-[#1F2926]/20 text-[#1F2926] font-semibold px-6 py-3 rounded-xl hover:bg-[#1F2926]/5 transition-colors">
+              <button onClick={() => scrollTo('funcionalidades')} className="border border-[#1F2926]/20 text-[#1F2926] font-semibold px-6 py-3 rounded-xl hover:bg-[#1F2926]/5 hover:-translate-y-1 active:translate-y-0 transition-all">
                 Conhecer a plataforma
               </button>
             </div>
@@ -273,7 +308,7 @@ export default function Home() {
       </section>
 
       {/* Benefits bar */}
-      <section className="bg-white py-16 border-y border-gray-100">
+      <section data-reveal="benefits" className={`bg-white py-16 border-y border-gray-100 ${reveal('benefits')}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
@@ -293,7 +328,7 @@ export default function Home() {
       </section>
 
       {/* Features */}
-      <section id="funcionalidades" className="py-20 max-w-6xl mx-auto px-4 sm:px-6">
+      <section id="funcionalidades" data-reveal="features" className={`py-20 max-w-6xl mx-auto px-4 sm:px-6 ${reveal('features')}`}>
         <div className="text-center mb-12">
           <h2 className="font-display font-bold text-3xl text-[#1F2926] mb-4">Tudo que seu comércio precisa</h2>
           <p className="text-gray-500 max-w-xl mx-auto">Uma plataforma completa para gerenciar seu negócio do início ao fim.</p>
@@ -311,7 +346,7 @@ export default function Home() {
       </section>
 
       {/* About */}
-      <section id="sobre" className="bg-[#1F2926] py-20">
+      <section id="sobre" data-reveal="sobre" className={`bg-[#1F2926] py-20 ${reveal('sobre')}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -336,13 +371,13 @@ export default function Home() {
               <div className="bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center gap-5">
                 {/* Gauge */}
                 <div className="flex-shrink-0">
-                  <SatisfactionDonut value={98} />
+                  <SatisfactionDonut value={satisfaction} />
                 </div>
                 {/* Content */}
                 <div className="flex flex-col gap-3 min-w-0">
                   <div>
                     <div className="text-white/40 text-[10px] font-semibold tracking-widest uppercase mb-1">Satisfação</div>
-                    <div className="font-display font-bold text-3xl text-white leading-none">98%</div>
+                    <div className="font-display font-bold text-3xl text-white leading-none">{satisfaction}%</div>
                     <div className="text-white/50 text-xs mt-1 leading-snug">dos clientes aprovam a plataforma</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -351,7 +386,7 @@ export default function Home() {
                         <div key={c} className="w-6 h-6 rounded-full border-2 border-[#1F2926] flex items-center justify-center text-[9px] font-bold text-white" style={{ background: c }}>✓</div>
                       ))}
                     </div>
-                    <span className="text-white/40 text-xs">+2.400 comércios</span>
+                    <span className="text-white/40 text-xs">+{commerceCount.toLocaleString('pt-BR')} comércios</span>
                   </div>
                   <div className="flex gap-2">
                     <div className="flex items-center gap-1.5">
@@ -372,8 +407,8 @@ export default function Home() {
               {/* Other stats */}
               <div className="grid grid-cols-3 gap-4">
                 {[
-                  { val: '2.400+', label: 'Comércios cadastrados' },
-                  { val: 'R$ 8M+', label: 'Em vendas processadas' },
+                  { val: `${commerceCount.toLocaleString('pt-BR')}+`, label: 'Comércios cadastrados' },
+                  { val: `R$ ${salesMillions}M+`, label: 'Em vendas processadas' },
                   { val: '24/7', label: 'Disponibilidade' },
                 ].map(s => (
                   <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-4">
@@ -388,7 +423,7 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section id="como-funciona" className="py-20 max-w-6xl mx-auto px-4 sm:px-6">
+      <section id="como-funciona" data-reveal="how" className={`py-20 max-w-6xl mx-auto px-4 sm:px-6 ${reveal('how')}`}>
         <div className="text-center mb-12">
           <h2 className="font-display font-bold text-3xl text-[#1F2926] mb-4">Como funciona</h2>
           <p className="text-gray-500">Em 4 passos simples você está operando.</p>
@@ -405,7 +440,7 @@ export default function Home() {
       </section>
 
       {/* Services */}
-      <section id="servicos" className="bg-[#F6F7F8] py-20">
+      <section id="servicos" data-reveal="services" className={`bg-[#F6F7F8] py-20 ${reveal('services')}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-[#E8753D]/10 text-[#E8753D] text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
@@ -440,7 +475,7 @@ export default function Home() {
       </section>
 
       {/* Plans */}
-      <section id="planos" className="py-20">
+      <section id="planos" data-reveal="plans" className={`py-20 ${reveal('plans')}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4">Dados demonstrativos</div>

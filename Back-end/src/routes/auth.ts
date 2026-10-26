@@ -67,6 +67,37 @@ const teamUpdateSchema = teamUserSchema.extend({
     birthDate: z.string().refine(isAdultBirthDate, 'A idade deve estar entre 18 e 100 anos.').optional(),
     password: password.optional()
 });
+const storeUpdateSchema = z.object({
+  legalName: z.string().trim().min(2),
+  fantasyName: z.string().trim().min(2),
+  stateTaxId: z.string().trim().optional(),
+  segment: z.string().trim().min(2),
+  zipCode: z.string().trim().min(8),
+  address: z.string().trim().min(2),
+  number: z.string().trim().min(1),
+  city: z.string().trim().min(2),
+  state: z.string().trim().length(2)
+});
+const profileUpdateSchema = z.object({
+  name: z.string().trim().min(2),
+  email,
+  phone: z.string().trim().regex(/^\d{10,11}$/, 'Telefone inválido.').optional().or(z.literal('')),
+  birthDate: z.string().refine(isAdultBirthDate, 'A idade deve estar entre 18 e 100 anos.').optional().or(z.literal('')),
+  password: password.optional()
+});
+const settingsUpdateSchema = z.object({
+  requireClient: z.boolean(),
+  allowDiscount: z.boolean(),
+  printReceipt: z.boolean(),
+  stockWarning: z.boolean(),
+  defaultMinStock: z.number().int().min(0),
+  warningPercentage: z.number().int().min(0).max(100),
+  stockCriticalNotifications: z.boolean(),
+  saleNotifications: z.boolean(),
+  paymentFailureNotifications: z.boolean(),
+  userChangeNotifications: z.boolean(),
+  passwordRecoveryNotifications: z.boolean()
+});
 
 const publicUser = (user: { id: string; name: string; email: string; role: string; storeId: string }) => ({
   id: user.id,
@@ -165,6 +196,17 @@ router.get('/store', requireAuth, async (request, response) => {
       number: true,
       city: true,
       state: true,
+      requireClient: true,
+      allowDiscount: true,
+      printReceipt: true,
+      stockWarning: true,
+      defaultMinStock: true,
+      warningPercentage: true,
+      stockCriticalNotifications: true,
+      saleNotifications: true,
+      paymentFailureNotifications: true,
+      userChangeNotifications: true,
+      passwordRecoveryNotifications: true,
       users: {
         where: { id: request.auth!.sub },
         select: { id: true, name: true, email: true, phone: true, birthDate: true, role: true }
@@ -179,6 +221,41 @@ router.get('/store', requireAuth, async (request, response) => {
 
   const { users, ...storeData } = store;
   response.json({ store: storeData, user: users[0] });
+});
+
+router.patch('/store', requireAuth, requireAdmin, async (request, response) => {
+  const data = storeUpdateSchema.parse(request.body);
+  const store = await prisma.store.update({
+    where: { id: request.auth!.storeId },
+    data: { ...data, stateTaxId: data.stateTaxId || null, state: data.state.toUpperCase() }
+  });
+  response.json({ store });
+});
+
+router.patch('/profile', requireAuth, async (request, response) => {
+  const data = profileUpdateSchema.parse(request.body);
+  const existing = await prisma.user.findFirst({ where: { email: data.email, id: { not: request.auth!.sub } } });
+  if (existing) {
+    response.status(409).json({ message: 'Este e-mail já está cadastrado.' });
+    return;
+  }
+  const user = await prisma.user.update({
+    where: { id: request.auth!.sub },
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: data.phone ? digitsOnly(data.phone) : null,
+      birthDate: data.birthDate ? new Date(`${data.birthDate}T00:00:00.000Z`) : null,
+      ...(data.password ? { passwordHash: await hashPassword(data.password) } : {})
+    }
+  });
+  response.json({ user: publicUser(user) });
+});
+
+router.patch('/settings', requireAuth, requireAdmin, async (request, response) => {
+  const data = settingsUpdateSchema.parse(request.body);
+  const store = await prisma.store.update({ where: { id: request.auth!.storeId }, data });
+  response.json({ settings: data, storeId: store.id });
 });
 
 router.get('/team', requireAuth, requireAdmin, async (request, response) => {

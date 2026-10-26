@@ -84,7 +84,7 @@ router.get('/', async (request, response) => {
       date: sale.createdAt
     })),
     criticalProducts: products
-      .filter(product => product.status === 'ACTIVE' && (product.quantity === 0 || product.quantity < product.minStock))
+      .filter(product => product.status === 'ACTIVE' && product.quantity <= 5)
       .slice(0, 5)
       .map(product => ({ name: product.name, sku: product.sku, quantity: product.quantity, minStock: product.minStock, status: product.status.toLowerCase() }))
   });

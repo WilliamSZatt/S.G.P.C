@@ -5,6 +5,7 @@ import { Search, Plus, Minus, X, Barcode, CreditCard, ShoppingCart, Check, User 
 import { api } from '../lib/api';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const ESTIMATED_TAX_RATE = 0.0865;
 
 interface CartItem { product: Product; qty: number }
 interface Product { id: string; name: string; description: string; sku: string; ean?: string; category: string; price: number; quantity: number; minStock: number; status: 'active' | 'inactive' }
@@ -31,7 +32,16 @@ export default function POSPage() {
   const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
   const [cashReceived, setCashReceived] = useState('');
   const [saleState, setSaleState] = useState<SaleState>('idle');
-  const [lastSale, setLastSale] = useState<{ id: string; total: number; change: number; clientName: string; items: CartItem[] } | null>(null);
+  const [lastSale, setLastSale] = useState<{
+    id: string;
+    subtotal: number;
+    discount: number;
+    total: number;
+    change: number;
+    clientName: string;
+    items: CartItem[];
+    completedAt: string;
+  } | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanState, setScanState] = useState<ScanState>('ready');
   const [scanResult, setScanResult] = useState<Product | null>(null);
@@ -39,15 +49,22 @@ export default function POSPage() {
   const [clientSearch, setClientSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [allowDiscount, setAllowDiscount] = useState(true);
+  const [requireClient, setRequireClient] = useState(true);
+  const [printReceipt, setPrintReceipt] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'active' } }),
-      api.get<{ items: Client[] }>('/clients', { params: { status: 'active', limit: 100 } })
+      api.get<{ items: Client[] }>('/clients', { params: { status: 'active', limit: 100 } }),
+      api.get<{ store: { allowDiscount: boolean; requireClient: boolean; printReceipt: boolean } }>('/auth/store')
     ])
-      .then(([productResponse, clientResponse]) => {
+      .then(([productResponse, clientResponse, storeResponse]) => {
         setProducts(productResponse.data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] })));
         setClients(clientResponse.data.items.map(client => ({ ...client, status: client.status.toLowerCase() as Client['status'] })));
+        setAllowDiscount(storeResponse.data.store.allowDiscount);
+        setRequireClient(storeResponse.data.store.requireClient);
+        setPrintReceipt(storeResponse.data.store.printReceipt);
       })
       .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar produtos e clientes.' }));
   }, [showToast]);
@@ -93,7 +110,7 @@ export default function POSPage() {
 
   const finalizeSale = async () => {
     if (cart.length === 0) { showToast({ type: 'error', message: 'O carrinho está vazio.' }); return; }
-    if (!selectedClient) { setClientError('Associe um cliente antes de finalizar a venda.'); return; }
+    if (requireClient && !selectedClient) { setClientError('Associe um cliente antes de finalizar a venda.'); return; }
     if (!payMethod) { showToast({ type: 'error', message: 'Selecione uma forma de pagamento.' }); return; }
     if (payMethod === 'dinheiro' && (parseFloat(cashReceived) || 0) < total) {
       showToast({ type: 'error', message: 'Valor recebido insuficiente.' }); return;
@@ -101,7 +118,7 @@ export default function POSPage() {
     setSaleState('loading');
     try {
       const { data } = await api.post<{ sale: { number: string; total: number; change: number | null } }>('/sales', {
-        clientId: selectedClient,
+        clientId: selectedClient || undefined,
         discount: discountAmt,
         paymentMethod: payMethod,
         cashReceived: payMethod === 'dinheiro' ? Number(cashReceived) : undefined,
@@ -109,8 +126,18 @@ export default function POSPage() {
       });
       const productResponse = await api.get<{ items: Product[] }>('/inventory/products', { params: { status: 'active' } });
       setProducts(productResponse.data.items.map(product => ({ ...product, status: product.status.toLowerCase() as Product['status'] })));
-      setLastSale({ id: data.sale.number, total: data.sale.total, change: data.sale.change ?? 0, clientName: selectedClientName || '', items: cart });
+      setLastSale({
+        id: data.sale.number,
+        subtotal,
+        discount: discountAmt,
+        total: data.sale.total,
+        change: data.sale.change ?? 0,
+        clientName: selectedClientName || '',
+        items: cart,
+        completedAt: new Date().toISOString()
+      });
       setSaleState('success');
+      if (printReceipt) window.setTimeout(() => window.print(), 100);
     } catch {
       setSaleState('error-network');
       showToast({ type: 'error', message: 'Não foi possível finalizar a venda.' });
@@ -167,7 +194,7 @@ export default function POSPage() {
                       <div className="text-xs text-gray-400 mb-0.5 font-mono">{p.sku}</div>
                       <div className="text-sm font-medium text-gray-800 leading-tight line-clamp-2 mb-1.5">{p.name}</div>
                       <div className="font-display font-bold text-[#1F2926]">{fmt(p.price)}</div>
-                      <div className={`text-[10px] mt-0.5 ${p.quantity < p.minStock ? 'text-amber-500' : 'text-gray-400'}`}>
+                      <div className={`text-[10px] mt-0.5 ${p.quantity <= 5 ? 'text-amber-500' : 'text-gray-400'}`}>
                         {outOfStock ? 'Sem estoque' : `${p.quantity} disponível`}
                       </div>
                     </button>
@@ -183,21 +210,38 @@ export default function POSPage() {
           {saleState === 'success' && lastSale ? (
             /* Success state */
             <div className="print-receipt flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#4F8B69]/10 flex items-center justify-center mb-4">
-                <Check size={28} className="text-[#4F8B69]" />
-              </div>
-              <h3 className="font-display font-bold text-xl text-[#1F2926] mb-1">Venda finalizada!</h3>
-              <div className="text-xs font-mono text-gray-400 mb-4">{lastSale.id}</div>
-              <div className="bg-[#F6F7F8] rounded-xl p-4 w-full mb-4 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-display font-bold text-[#1F2926]">{fmt(lastSale.total)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Pagamento</span><span className="font-medium capitalize">{payMethod}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Cliente</span><span className="font-medium">{lastSale.clientName}</span></div>
-                <div className="border-t border-gray-200 pt-2 mt-2 space-y-1 text-left">
-                  {lastSale.items.map(item => <div key={item.product.id} className="flex justify-between text-xs"><span>{item.qty}x {item.product.name}</span><span>{fmt(item.product.price * item.qty)}</span></div>)}
+              <div className="receipt-paper w-full max-w-md bg-white text-gray-700 px-5 py-6 text-left">
+                <div className="text-center">
+                  <div className="font-mono font-bold tracking-[0.25em] text-lg text-[#1F2926]">COMÉRCIOOS</div>
+                  <div className="text-[11px] text-gray-500 mt-1">COMPROVANTE DE VENDA</div>
+                  <div className="text-[11px] text-gray-400 mt-1">{new Date(lastSale.completedAt).toLocaleString('pt-BR')}</div>
                 </div>
-                {lastSale.change > 0 && <div className="flex justify-between"><span className="text-gray-500">Troco</span><span className="font-semibold text-[#4F8B69]">{fmt(lastSale.change)}</span></div>}
+                <div className="receipt-divider my-4">--------------------------------</div>
+                <div className="flex justify-between text-xs font-mono">
+                  <span>VENDA</span><span>{lastSale.id}</span>
+                </div>
+                <div className="flex justify-between text-xs mt-1">
+                  <span>CLIENTE</span><span className="font-medium">{lastSale.clientName}</span>
+                </div>
+                <div className="receipt-divider my-4">--------------------------------</div>
+                <div className="flex justify-between text-xs font-mono font-bold mb-2">
+                  <span>DESCRIÇÃO</span><span>VALOR</span>
+                </div>
+                <div className="space-y-1 text-xs font-mono">
+                  {lastSale.items.map(item => <div key={item.product.id} className="flex justify-between gap-4"><span>{item.qty}x {item.product.name}</span><span>{fmt(item.product.price * item.qty)}</span></div>)}
+                </div>
+                <div className="receipt-divider my-4">--------------------------------</div>
+                <div className="flex justify-between text-sm font-mono"><span>SUBTOTAL</span><span>{fmt(lastSale.subtotal)}</span></div>
+                {lastSale.discount > 0 && <div className="flex justify-between text-sm font-mono"><span>DESCONTO</span><span>−{fmt(lastSale.discount)}</span></div>}
+                <div className="flex justify-between text-xs font-mono mt-1"><span>IMPOSTO INCLUSO (8,65%)</span><span>{fmt(lastSale.total - (lastSale.total / (1 + ESTIMATED_TAX_RATE)))}</span></div>
+                <div className="flex justify-between text-xl font-mono font-bold text-[#1F2926] mt-3"><span>TOTAL</span><span>{fmt(lastSale.total)}</span></div>
+                <div className="receipt-divider my-4">--------------------------------</div>
+                <div className="flex justify-between text-sm font-mono"><span>PAGAMENTO</span><span className="capitalize">{payMethod}</span></div>
+                {lastSale.change > 0 && <div className="flex justify-between text-sm font-mono"><span>TROCO</span><span>{fmt(lastSale.change)}</span></div>}
+                <div className="receipt-divider my-4">--------------------------------</div>
+                <div className="text-center font-mono text-xs tracking-[0.2em]">OBRIGADO PELA PREFERÊNCIA!</div>
               </div>
-              <button onClick={newSale} className="w-full bg-[#E8753D] text-white font-semibold py-3 rounded-xl hover:bg-[#d4662e] transition-colors mb-2">
+              <button onClick={newSale} className="print-hidden w-full bg-[#E8753D] text-white font-semibold py-3 rounded-xl hover:bg-[#d4662e] transition-colors mb-2">
                 Nova venda
               </button>
               <button onClick={() => window.print()} className="print-hidden w-full border border-gray-200 text-gray-600 text-sm py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
@@ -262,10 +306,12 @@ export default function POSPage() {
                   {clientError && <p className="text-xs text-red-600">{clientError}</p>}
 
                   {/* Discount */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500 flex-shrink-0">Desconto (R$)</span>
-                    <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0,00" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D] text-right" />
-                  </div>
+                  {allowDiscount && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 flex-shrink-0">Desconto (R$)</span>
+                      <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="0,00" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D] text-right" />
+                    </div>
+                  )}
 
                   {/* Summary */}
                   <div className="space-y-1 text-sm">

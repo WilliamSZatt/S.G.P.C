@@ -19,6 +19,17 @@ type StoreData = {
   number: string;
   city: string;
   state: string;
+  requireClient: boolean;
+  allowDiscount: boolean;
+  printReceipt: boolean;
+  stockWarning: boolean;
+  defaultMinStock: number;
+  warningPercentage: number;
+  stockCriticalNotifications: boolean;
+  saleNotifications: boolean;
+  paymentFailureNotifications: boolean;
+  userChangeNotifications: boolean;
+  passwordRecoveryNotifications: boolean;
 };
 
 type StoreUser = {
@@ -41,18 +52,42 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function Settings() {
-  const { currentUser, showToast } = useApp();
+  const { currentUser, showToast, updateCurrentUser } = useApp();
   const isAdmin = currentUser?.role === 'admin';
   const [tab, setTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [storeData, setStoreData] = useState<StoreData | null>(null);
   const [storeUser, setStoreUser] = useState<StoreUser | null>(null);
+  const [editingStore, setEditingStore] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profilePassword, setProfilePassword] = useState('');
+  const [originalStore, setOriginalStore] = useState<StoreData | null>(null);
+  const [originalProfile, setOriginalProfile] = useState<StoreUser | null>(null);
 
   useEffect(() => {
     api.get<{ store: StoreData; user: StoreUser }>('/auth/store')
       .then(({ data }) => {
         setStoreData(data.store);
         setStoreUser(data.user);
+        setOriginalStore(data.store);
+        setOriginalProfile(data.user);
+        setPdvSettings({
+          requireClient: data.store.requireClient,
+          allowDiscount: data.store.allowDiscount,
+          printReceipt: data.store.printReceipt,
+          stockWarning: data.store.stockWarning,
+        });
+        setStockSettings({
+          defaultMinStock: String(data.store.defaultMinStock),
+          warningPercentage: String(data.store.warningPercentage),
+        });
+        setNotifSettings({
+          stockCritical: data.store.stockCriticalNotifications,
+          saleDone: data.store.saleNotifications,
+          paymentFail: data.store.paymentFailureNotifications,
+          userChanged: data.store.userChangeNotifications,
+          passwordRecovery: data.store.passwordRecoveryNotifications,
+        });
       })
       .catch(() => showToast({ type: 'error', message: 'Não foi possível carregar os dados do comércio.' }));
   }, [showToast]);
@@ -73,27 +108,93 @@ export default function Settings() {
   });
   const [stockSettings, setStockSettings] = useState({ defaultMinStock: '10', warningPercentage: '20' });
 
-  useEffect(() => {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed.notifSettings) setNotifSettings(p => ({ ...p, ...parsed.notifSettings }));
-      if (parsed.pdvSettings) setPdvSettings(p => ({ ...p, ...parsed.pdvSettings }));
-      if (parsed.stockSettings) setStockSettings(p => ({ ...p, ...parsed.stockSettings }));
-    } catch {
-      localStorage.removeItem(SETTINGS_KEY);
-    }
-  }, []);
-
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ notifSettings, pdvSettings, stockSettings }));
-    window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, {
-      detail: { notifSettings, pdvSettings, stockSettings }
-    }));
-    setSaving(false);
-    showToast({ type: 'success', message: 'Configurações salvas com sucesso!' });
+    try {
+      const payload = {
+        requireClient: pdvSettings.requireClient,
+        allowDiscount: pdvSettings.allowDiscount,
+        printReceipt: pdvSettings.printReceipt,
+        stockWarning: pdvSettings.stockWarning,
+        defaultMinStock: Number(stockSettings.defaultMinStock),
+        warningPercentage: Number(stockSettings.warningPercentage),
+        stockCriticalNotifications: notifSettings.stockCritical,
+        saleNotifications: notifSettings.saleDone,
+        paymentFailureNotifications: notifSettings.paymentFail,
+        userChangeNotifications: notifSettings.userChanged,
+        passwordRecoveryNotifications: notifSettings.passwordRecovery,
+      };
+      const { data } = await api.patch<{ store: StoreData }>('/auth/settings', payload);
+      setStoreData(data.store);
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ notifSettings, pdvSettings, stockSettings }));
+      window.dispatchEvent(new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: { notifSettings, pdvSettings, stockSettings } }));
+      showToast({ type: 'success', message: 'Configurações salvas com sucesso!' });
+    } catch (error) {
+      showToast({ type: 'error', message: error instanceof Error ? error.message : 'Não foi possível salvar as configurações.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveStore = async () => {
+    if (!storeData) return;
+    setSaving(true);
+    try {
+      const { data } = await api.patch<{ store: StoreData }>('/auth/store', storeData);
+      setStoreData(data.store);
+      setOriginalStore(data.store);
+      setEditingStore(false);
+      showToast({ type: 'success', message: 'Dados do comércio atualizados.' });
+    } catch {
+      showToast({ type: 'error', message: 'Não foi possível atualizar os dados do comércio.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!storeUser) return;
+    setSaving(true);
+    try {
+      const { data } = await api.patch<{ user: StoreUser }>('/auth/profile', {
+        name: storeUser.name,
+        email: storeUser.email,
+        phone: storeUser.phone || '',
+        birthDate: storeUser.birthDate ? storeUser.birthDate.slice(0, 10) : '',
+        ...(profilePassword ? { password: profilePassword } : {})
+      });
+      setStoreUser({ ...storeUser, ...data.user });
+      setOriginalProfile({ ...storeUser, ...data.user });
+      updateCurrentUser({ name: data.user.name, email: data.user.email });
+      setProfilePassword('');
+      setEditingProfile(false);
+      showToast({ type: 'success', message: 'Perfil atualizado.' });
+    } catch {
+      showToast({ type: 'error', message: 'Não foi possível atualizar o perfil.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startStoreEditing = () => {
+    if (storeData) setOriginalStore({ ...storeData });
+    setEditingStore(true);
+  };
+
+  const cancelStoreEditing = () => {
+    setStoreData(originalStore ? { ...originalStore } : storeData);
+    setEditingStore(false);
+  };
+
+  const startProfileEditing = () => {
+    if (storeUser) setOriginalProfile({ ...storeUser });
+    setEditingProfile(true);
+  };
+
+  const cancelProfileEditing = () => {
+    setStoreUser(originalProfile ? { ...originalProfile } : storeUser);
+    setProfilePassword('');
+    setEditingProfile(false);
   };
 
   const inpCls = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]';
@@ -114,28 +215,44 @@ export default function Settings() {
 
         <div className="max-w-2xl">
           {/* Store data */}
-          {tab === 0 && isAdmin && (
+          {((tab === 0 && isAdmin) || (tab === 0 && !isAdmin)) && (
             <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
-              <h3 className="font-display font-semibold text-[#1F2926] mb-4">Dados do comércio</h3>
-              {!storeData ? (
+              {isAdmin ? <h3 className="font-display font-semibold text-[#1F2926] mb-4">Dados do comércio</h3> : <h3 className="font-display font-semibold text-[#1F2926] mb-4">Meu perfil</h3>}
+              {!storeData || !storeUser ? (
                 <p className="text-sm text-gray-500">Carregando dados do cadastro...</p>
-              ) : [
+              ) : isAdmin ? <>
+                <div className="flex justify-end">
+                  {!editingStore ? <button onClick={startStoreEditing} className="text-sm text-[#E8753D] hover:underline">Editar dados</button> : <div className="flex gap-2"><button onClick={cancelStoreEditing} className="text-sm text-gray-500">Cancelar</button><button onClick={saveStore} disabled={saving} className="text-sm font-semibold text-[#4F8B69] disabled:opacity-50">Salvar</button></div>}
+                </div>
+                {[
                 ['Nome fantasia', storeData.fantasyName],
                 ['Razão social', storeData.legalName],
                 ['CPF/CNPJ', storeData.document],
-                ['Inscrição estadual', storeData.stateTaxId || 'Não informada'],
+                ['Inscrição estadual', storeData.stateTaxId || ''],
                 ['Segmento', storeData.segment],
                 ['CEP', storeData.zipCode],
                 ['Endereço', storeData.address],
                 ['Número', storeData.number],
                 ['Cidade', storeData.city],
                 ['Estado', storeData.state],
-              ].map(([label, value]) => (
+                ].map(([label, value]) => (
                 <div key={label}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-                  <input value={value} readOnly className={`${inpCls} bg-gray-50 text-gray-700`} />
+                  <input value={value} readOnly={label === 'CPF/CNPJ' || !editingStore} onChange={e => setStoreData({ ...storeData, [({ 'Nome fantasia': 'fantasyName', 'Razão social': 'legalName', 'Inscrição estadual': 'stateTaxId', Segmento: 'segment', CEP: 'zipCode', Endereço: 'address', Número: 'number', Cidade: 'city', Estado: 'state' } as Record<string, string>)[label]]: e.target.value })} className={`${editingStore && label !== 'CPF/CNPJ' ? 'bg-white' : 'bg-gray-50'} ${inpCls} text-gray-700`} />
                 </div>
-              ))}
+                ))}
+              </> : <>
+                <div className="flex justify-end">
+                  {!editingProfile ? <button onClick={startProfileEditing} className="text-sm text-[#E8753D] hover:underline">Editar perfil</button> : <div className="flex gap-2"><button onClick={cancelProfileEditing} className="text-sm text-gray-500">Cancelar</button><button onClick={saveProfile} disabled={saving} className="text-sm font-semibold text-[#4F8B69] disabled:opacity-50">Salvar</button></div>}
+                </div>
+                {[
+                  ['Nome completo', 'name', storeUser.name],
+                  ['E-mail', 'email', storeUser.email],
+                  ['Telefone', 'phone', storeUser.phone || ''],
+                  ['Data de nascimento', 'birthDate', storeUser.birthDate ? storeUser.birthDate.slice(0, 10) : ''],
+                ].map(([label, field, value]) => <div key={label}><label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label><input type={field === 'birthDate' ? 'date' : 'text'} value={value} readOnly={!editingProfile} onChange={e => setStoreUser({ ...storeUser, [field]: e.target.value })} className={`${inpCls} ${editingProfile ? 'bg-white' : 'bg-gray-50'} text-gray-700`} /></div>)}
+                {editingProfile && <div><label className="text-sm font-medium text-gray-700 block mb-1.5">Nova senha (opcional)</label><input type="password" value={profilePassword} onChange={e => setProfilePassword(e.target.value)} className={inpCls} placeholder="Deixe vazio para manter a senha atual" /></div>}
+              </>}
             </div>
           )}
 
@@ -150,23 +267,26 @@ export default function Settings() {
                 <div>
                   <div className="font-semibold text-[#1F2926]">{storeUser?.name || 'Carregando...'}</div>
                   <div className="text-sm text-[#4F8B69]">Administrador</div>
-                  <button className="text-xs text-[#4D7CA8] mt-1 hover:underline">Alterar foto</button>
                 </div>
               </div>
+              <div className="flex justify-end">
+                {!editingProfile ? <button onClick={startProfileEditing} className="text-sm text-[#E8753D] hover:underline">Editar perfil</button> : <div className="flex gap-2"><button onClick={cancelProfileEditing} className="text-sm text-gray-500">Cancelar</button><button onClick={saveProfile} disabled={saving} className="text-sm font-semibold text-[#4F8B69] disabled:opacity-50">Salvar</button></div>}
+              </div>
               {[
-                ['Nome completo', storeUser?.name || ''],
-                ['E-mail', storeUser?.email || ''],
-                ['Telefone', storeUser?.phone || 'Não informado'],
-                ['Data de nascimento', storeUser?.birthDate ? new Date(storeUser.birthDate).toLocaleDateString('pt-BR') : 'Não informada'],
-              ].map(([label, value]) => (
+                ['Nome completo', 'name', storeUser?.name || ''],
+                ['E-mail', 'email', storeUser?.email || ''],
+                ['Telefone', 'phone', storeUser?.phone || ''],
+                ['Data de nascimento', 'birthDate', storeUser?.birthDate ? storeUser.birthDate.slice(0, 10) : ''],
+              ].map(([label, field, value]) => (
                 <div key={label}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-                  <input value={value} readOnly className={`${inpCls} bg-gray-50 text-gray-700`} />
+                  <input type={field === 'birthDate' ? 'date' : 'text'} value={value} readOnly={!editingProfile} onChange={e => storeUser && setStoreUser({ ...storeUser, [field]: e.target.value })} className={`${inpCls} ${editingProfile ? 'bg-white' : 'bg-gray-50'} text-gray-700`} />
                 </div>
               ))}
+              {editingProfile && <div><label className="text-sm font-medium text-gray-700 block mb-1.5">Nova senha (opcional)</label><input type="password" value={profilePassword} onChange={e => setProfilePassword(e.target.value)} className={inpCls} placeholder="Deixe vazio para manter a senha atual" /></div>}
               <div className="border-t border-gray-100 pt-4">
                 <div className="text-sm font-medium text-gray-700 mb-3">Segurança</div>
-                <button className="text-sm text-[#E8753D] hover:underline">Alterar senha</button>
+                <span className="text-xs text-gray-500">A senha pode ser alterada ao editar o perfil.</span>
               </div>
             </div>
           )}

@@ -15,7 +15,7 @@ type MovementField = 'qty' | 'reason' | 'notes';
 function stockStatus(p: Product): { label: string; cls: string } {
   if (p.status === 'inactive') return { label: 'Inativo', cls: 'bg-gray-100 text-gray-500' };
   if (p.quantity === 0) return { label: 'Sem estoque', cls: 'bg-[#C65B42]/10 text-[#C65B42]' };
-  if (p.quantity < p.minStock) return { label: 'Estoque baixo', cls: 'bg-amber-100 text-amber-700' };
+  if (p.quantity <= 5) return { label: 'Estoque baixo', cls: 'bg-amber-100 text-amber-700' };
   return { label: 'Em estoque', cls: 'bg-[#4F8B69]/10 text-[#4F8B69]' };
 }
 
@@ -46,7 +46,7 @@ export default function StockPage() {
     const q = search.toLowerCase();
     const matchSearch = !search || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.ean || '').includes(digitsOnly(search)) || p.category.toLowerCase().includes(q);
     const matchCat = category === 'Todos' || p.category === category;
-    const matchStatus = statusFilter === 'all' || (statusFilter === 'active' && p.status === 'active') || (statusFilter === 'inactive' && p.status === 'inactive') || (statusFilter === 'low' && p.quantity > 0 && p.quantity < p.minStock) || (statusFilter === 'out' && p.quantity === 0);
+    const matchStatus = statusFilter === 'all' || (statusFilter === 'active' && p.status === 'active') || (statusFilter === 'inactive' && p.status === 'inactive') || (statusFilter === 'low' && p.quantity > 0 && p.quantity <= 5) || (statusFilter === 'out' && p.quantity === 0);
     return matchSearch && matchCat && matchStatus;
   });
 
@@ -121,7 +121,7 @@ export default function StockPage() {
 
   const inpCls = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]';
 
-  const alerts = products.filter(p => p.status === 'active' && (p.quantity === 0 || p.quantity < p.minStock));
+  const alerts = products.filter(p => p.status === 'active' && p.quantity <= 5);
 
   return (
     <AuthLayout title="Estoque e Produtos">
@@ -190,7 +190,7 @@ export default function StockPage() {
                       <td className="px-4 py-3.5 text-sm text-gray-600">{p.category}</td>
                       <td className="px-4 py-3.5 font-display font-semibold text-sm text-[#1F2926]">{fmt(p.price)}</td>
                       <td className="px-4 py-3.5">
-                        <div className={`font-display font-bold text-sm ${p.quantity === 0 ? 'text-[#C65B42]' : p.quantity < p.minStock ? 'text-amber-600' : 'text-gray-800'}`}>{p.quantity} un.</div>
+                        <div className={`font-display font-bold text-sm ${p.quantity === 0 ? 'text-[#C65B42]' : p.quantity <= 5 ? 'text-amber-600' : 'text-gray-800'}`}>{p.quantity} un.</div>
                         <div className="text-[11px] text-gray-400">Mín: {p.minStock}</div>
                       </td>
                       <td className="px-4 py-3.5"><StockBadge p={p} /></td>

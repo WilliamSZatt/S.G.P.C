@@ -44,7 +44,7 @@ router.get('/products', async (request, response) => {
   const filtered = products.filter((product) => query.status === 'all'
     || (query.status === 'active' && product.status === 'ACTIVE')
     || (query.status === 'inactive' && product.status === 'INACTIVE')
-    || (query.status === 'low' && product.quantity > 0 && product.quantity < product.minStock)
+    || (query.status === 'low' && product.quantity > 0 && product.quantity <= 5)
     || (query.status === 'out' && product.quantity === 0));
   response.json({ items: filtered.map(publicProduct) });
 });

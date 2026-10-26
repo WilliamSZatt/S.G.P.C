@@ -16,6 +16,26 @@ type Sale = {
   createdAt: string;
   client: { name: string } | null;
 };
+type ClientReport = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  status: 'ACTIVE' | 'INACTIVE';
+  totalSpent: number;
+  lastPurchase: string | null;
+  createdAt: string;
+};
+type ProductReport = {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  quantity: number;
+  minStock: number;
+  price: number;
+  status: 'active' | 'inactive';
+};
 
 const fmt = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const paymentLabels: Record<Sale['paymentMethod'], string> = { CASH: 'Dinheiro', PIX: 'PIX', CREDIT: 'Crédito', DEBIT: 'Débito' };
@@ -52,10 +72,12 @@ export default function Reports() {
   const [period, setPeriod] = useState<ReportPeriod>('month');
   const [status, setStatus] = useState<ReportStatus>('all');
   const [payment, setPayment] = useState<PaymentFilter>('all');
-  const [search, setSearch] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [sales, setSales] = useState<Sale[]>([]);
+  const [clients, setClients] = useState<ClientReport[]>([]);
+  const [products, setProducts] = useState<ProductReport[]>([]);
+  const [section, setSection] = useState<'sales' | 'clients' | 'stock'>('sales');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -64,17 +86,23 @@ export default function Reports() {
     setError('');
     try {
       const range = rangeFor(period, start, end);
-      const { data } = await api.get<{ items: Sale[] }>('/sales', {
-        params: { search: search.trim() || undefined, status, paymentMethod: payment, limit: 1000, startDate: range.start || undefined, endDate: range.end || undefined }
-      });
-      setSales(data.items);
+      const [salesResponse, clientsResponse, productsResponse] = await Promise.all([
+        api.get<{ items: Sale[] }>('/sales', {
+          params: { status, paymentMethod: payment, limit: 1000, startDate: range.start || undefined, endDate: range.end || undefined }
+        }),
+        api.get<{ items: ClientReport[] }>('/clients', { params: { status: 'all', limit: 100 } }),
+        api.get<{ items: ProductReport[] }>('/inventory/products', { params: { status: 'all' } })
+      ]);
+      setSales(salesResponse.data.items);
+      setClients(clientsResponse.data.items);
+      setProducts(productsResponse.data.items);
     } catch {
       setError('Não foi possível carregar o relatório.');
       setSales([]);
     } finally {
       setLoading(false);
     }
-  }, [end, payment, period, search, start, status]);
+  }, [end, payment, period, start, status]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -90,6 +118,15 @@ export default function Reports() {
     });
     return [...grouped].map(([date, total]) => ({ date, total }));
   }, [completed]);
+  const periodRange = useMemo(() => rangeFor(period, start, end), [end, period, start]);
+  const gainedClients = useMemo(() => clients.filter(client => {
+    const created = new Date(client.createdAt).getTime();
+    return (!periodRange.start || created >= new Date(periodRange.start).getTime())
+      && (!periodRange.end || created <= new Date(periodRange.end).getTime());
+  }), [clients, periodRange]);
+  const lostClients = useMemo(() => clients.filter(client => client.status === 'INACTIVE'), [clients]);
+  const lowStock = products.filter(product => product.quantity > 0 && product.quantity <= 5);
+  const outOfStock = products.filter(product => product.quantity === 0);
 
   const exportCsv = () => {
     const rows = [['Número', 'Cliente', 'Total', 'Pagamento', 'Status', 'Data'], ...sales.map(sale => [
@@ -102,6 +139,17 @@ export default function Reports() {
   return (
     <AuthLayout title="Relatórios">
       <div className="print-report p-4 lg:p-6 space-y-5">
+        <div className="report-controls flex gap-2 overflow-x-auto">
+          {[
+            ['sales', 'Vendas'],
+            ['clients', 'Clientes'],
+            ['stock', 'Estoque']
+          ].map(([value, label]) => (
+            <button key={value} onClick={() => setSection(value as typeof section)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${section === value ? 'bg-[#1F2926] text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="report-controls bg-white rounded-2xl border border-gray-100 p-4 space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-[#1F2926]"><Filter size={16} /> Filtros do relatório</div>
           <div className="flex flex-wrap gap-2">
@@ -109,7 +157,6 @@ export default function Reports() {
           </div>
           {period === 'custom' && <div className="flex flex-wrap gap-3"><label className="text-xs text-gray-500">De<input type="date" value={start} onChange={event => setStart(event.target.value)} className="block border rounded-lg p-2 text-sm" /></label><label className="text-xs text-gray-500">Até<input type="date" value={end} onChange={event => setEnd(event.target.value)} className="block border rounded-lg p-2 text-sm" /></label></div>}
           <div className="flex flex-wrap gap-3">
-            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por nº da venda, cliente, produto ou SKU..." className="min-w-64 flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8753D]/20 focus:border-[#E8753D]" />
             <select value={status} onChange={event => setStatus(event.target.value as ReportStatus)} className="border rounded-lg px-3 py-2 text-sm"><option value="all">Todos os status</option><option value="completed">Concluídas</option><option value="pending">Pendentes</option><option value="cancelled">Canceladas</option></select>
             <select value={payment} onChange={event => setPayment(event.target.value as PaymentFilter)} className="border rounded-lg px-3 py-2 text-sm"><option value="all">Todas as formas</option><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="credito">Crédito</option><option value="debito">Débito</option></select>
             <button onClick={() => void load()} className="bg-[#E8753D] text-white rounded-lg px-4 py-2 text-sm font-semibold">Atualizar</button>
@@ -118,7 +165,7 @@ export default function Reports() {
           </div>
         </div>
         {error && <div className="report-controls bg-red-50 text-red-700 rounded-xl p-3 text-sm">{error}</div>}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {section === 'sales' && <><div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             ['Vendas concluídas', completed.length.toString(), 'Quantidade de vendas concluídas no filtro.'],
             ['Receita total', fmt(revenue), 'Soma dos valores das vendas concluídas.'],
@@ -133,7 +180,34 @@ export default function Reports() {
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="p-5 border-b border-gray-100 font-display font-semibold text-[#1F2926]">Vendas filtradas ({sales.length})</div>
           <div className="overflow-x-auto"><table className="w-full"><thead className="bg-[#F6F7F8]"><tr>{['Nº Venda', 'Cliente', 'Total', 'Pagamento', 'Status', 'Data'].map(header => <th key={header} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{header}</th>)}</tr></thead><tbody className="divide-y divide-gray-50">{sales.map(sale => <tr key={sale.id}><td className="px-4 py-3 text-sm">{sale.number}</td><td className="px-4 py-3 text-sm">{sale.client?.name || 'Consumidor não informado'}</td><td className="px-4 py-3 text-sm font-semibold">{fmt(sale.total)}</td><td className="px-4 py-3 text-sm">{paymentLabels[sale.paymentMethod]}</td><td className="px-4 py-3 text-sm">{statusLabels[sale.status]}</td><td className="px-4 py-3 text-sm text-gray-500">{new Date(sale.createdAt).toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div>
-        </div>
+        </div></>}
+        {section === 'clients' && <div className="bg-white rounded-2xl border border-gray-100 p-5">
+          <h3 className="font-display font-semibold text-[#1F2926] mb-4">Visão geral dos clientes</h3>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={[{ status: 'Ganhos', quantidade: gainedClients.length }, { status: 'Perdidos', quantidade: lostClients.length }]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="status" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="quantidade" name="Clientes" fill="#4D7CA8" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>}
+        {section === 'stock' && <div className="bg-white rounded-2xl border border-gray-100 p-5">
+          <h3 className="font-display font-semibold text-[#1F2926] mb-4">Resumo do estoque</h3>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={[
+              { status: 'Produtos disponíveis', quantidade: products.filter(product => product.status === 'active' && product.quantity > 0).length },
+              { status: 'Produtos sem unidades', quantidade: outOfStock.length },
+            ]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="status" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="quantidade" name="Produtos" fill="#4F8B69" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>}
       </div>
     </AuthLayout>
   );

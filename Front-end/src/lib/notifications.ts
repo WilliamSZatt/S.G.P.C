@@ -24,7 +24,7 @@ export async function loadNotifications(): Promise<AppNotification[]> {
   ]);
   const now = new Date();
   const stockNotifications = productsResponse.data.items
-    .filter(product => product.status.toLowerCase() === 'active' && (product.quantity === 0 || product.quantity < product.minStock))
+    .filter(product => product.status.toLowerCase() === 'active' && product.quantity <= 5)
     .sort((a, b) => a.quantity - b.quantity)
     .slice(0, 5)
     .map(product => ({

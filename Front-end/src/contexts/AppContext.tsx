@@ -28,6 +28,7 @@ interface AppContextType {
   currentPage: Page;
   navigate: (page: Page) => void;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  updateCurrentUser: (user: Partial<User>) => void;
   logout: () => void;
   toast: ToastMessage | null;
   showToast: (t: Omit<ToastMessage, 'id'>) => void;
@@ -85,6 +86,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCurrentPage('login');
   }, []);
 
+  const updateCurrentUser = useCallback((user: Partial<User>) => {
+    setCurrentUser(previous => previous ? { ...previous, ...user } : previous);
+  }, []);
+
   const showToast = useCallback((t: Omit<ToastMessage, 'id'>) => {
     const id = Math.random().toString(36).slice(2);
     setToast({ ...t, id });
@@ -92,7 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ currentUser, currentPage, navigate, login, logout, toast, showToast, sidebarOpen, setSidebarOpen }}>
+    <AppContext.Provider value={{ currentUser, currentPage, navigate, login, updateCurrentUser, logout, toast, showToast, sidebarOpen, setSidebarOpen }}>
       {children}
     </AppContext.Provider>
   );

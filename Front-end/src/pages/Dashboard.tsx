@@ -59,7 +59,7 @@ function DonutChart({ data }: { data: Record<string, number> }) {
 }
 
 export default function Dashboard() {
-  const { currentUser, navigate } = useApp();
+  const { navigate } = useApp();
   const [period, setPeriod] = useState('Este mês');
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
@@ -77,10 +77,6 @@ export default function Dashboard() {
 
   const criticalProducts = data.criticalProducts;
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
-  const firstName = currentUser?.name.split(' ')[0];
-
   const kpis = [
     { label: 'Receita total', value: fmt(data.revenue), change: data.revenueChange, icon: '💰', color: '#4F8B69' },
     { label: 'Lucro líquido', value: fmt(data.profit), change: data.profitChange, icon: '📈', color: '#4D7CA8' },
@@ -89,7 +85,7 @@ export default function Dashboard() {
 
 
   return (
-    <AuthLayout title={`${greeting}, ${firstName}!`}>
+    <AuthLayout title="Painel">
       <div className="p-4 lg:p-6 space-y-6">
         {error && <div className="bg-red-50 text-red-700 rounded-xl p-3 text-sm">{error}</div>}
         {loading && <div className="text-sm text-gray-400">Atualizando dados do painel...</div>}
@@ -143,7 +139,6 @@ export default function Dashboard() {
               {[
                 { label: 'Nova venda', icon: ShoppingCart, page: 'pos', color: 'bg-[#E8753D]' },
                 { label: 'Novo cliente', icon: Users, page: 'clients', color: 'bg-[#4D7CA8]' },
-                { label: 'Novo produto', icon: Package, page: 'stock', color: 'bg-[#4F8B69]' },
                 { label: 'Consultar estoque', icon: Package, page: 'stock', color: 'bg-[#1F2926]' },
                 { label: 'Abrir relatórios', icon: BarChart, page: 'reports', color: 'bg-gray-600' },
               ].map(({ label, icon: Icon, page, color }) => (
