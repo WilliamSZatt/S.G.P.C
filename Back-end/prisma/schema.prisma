@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+}
+
+model Store {
+  id          String          @id @default(cuid())
+  document    String          @unique
+  legalName   String
+  fantasyName String
+  stateTaxId  String?
+  segment     String
+  zipCode     String
+  address     String
+  number      String
+  city        String
+  state       String
+  requireClient Boolean @default(true)
+  allowDiscount Boolean @default(true)
+  printReceipt Boolean @default(false)
+  stockWarning Boolean @default(true)
+  defaultMinStock Int @default(10)
+  warningPercentage Int @default(20)
+  stockCriticalNotifications Boolean @default(true)
+  saleNotifications Boolean @default(true)
+  paymentFailureNotifications Boolean @default(true)
+  userChangeNotifications Boolean @default(true)
+  passwordRecoveryNotifications Boolean @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  users       User[]
+  clients     Client[]
+  products    Product[]
+  movements   StockMovement[]
+  sales       Sale[]
+  payments    Payment[]
+  expenses    Expense[]
+}
+
+model User {
+  id              String               @id @default(cuid())
+  name            String
+  cpf             String?
+  phone           String?
+  birthDate       DateTime?
+  email           String               @unique
+  passwordHash    String
+  role            UserRole             @default(ADMIN)
+  active          Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  storeId         String
+  store           Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  resetTokens     PasswordResetToken[]
+  createdClients  Client[]             @relation("ClientCreatedBy")
+  createdProducts Product[]            @relation("ProductCreatedBy")
+  stockMovements  StockMovement[]
+  sales           Sale[]
+  expenses        Expense[]
+
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  SALE
+}
+
+enum PaymentMethod {
+  CASH
+  PIX
+  CREDIT
+  DEBIT
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  PENDING
+}
+
+model Client {
+  id           String       @id @default(cuid())
+  name         String
+  cpf          String?
+  phone        String?
+  email        String
+  totalSpent   Float        @default(0)
+  lastPurchase DateTime?
+  status       RecordStatus @default(ACTIVE)
+  storeId      String
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User         @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  sales        Sale[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([storeId, email])
+  @@index([storeId, status])
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  name        String
+  description String          @default("")
+  sku         String
+  ean         String?
+  category    String
+  price       Float
+  quantity    Int             @default(0)
+  minStock    Int             @default(0)
+  status      RecordStatus    @default(ACTIVE)
+  storeId     String
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User            @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  movements   StockMovement[]
+  saleItems   SaleItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([storeId, sku])
+  @@unique([storeId, ean])
+  @@index([storeId, status])
+}
+
+model StockMovement {
+  id          String            @id @default(cuid())
+  type        StockMovementType
+  quantity    Int
+  previousQty Int
+  newQty      Int
+  reason      String?
+  notes       String?
+  productId   String
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId     String
+  store       Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saleId      String?
+  sale        Sale?             @relation(fields: [saleId], references: [id])
+  createdAt   DateTime          @default(now())
+
+  @@index([storeId, productId, createdAt])
+}
+
+model Sale {
+  id            String          @id @default(cuid())
+  number        String          @unique
+  subtotal      Float
+  discount      Float           @default(0)
+  total         Float
+  paymentMethod PaymentMethod
+  cashReceived  Float?
+  change        Float?
+  status        SaleStatus      @default(COMPLETED)
+  storeId       String
+  store         Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  items         SaleItem[]
+  movements     StockMovement[]
+  payments      Payment[]
+  createdAt     DateTime        @default(now())
+
+  @@index([storeId, createdAt])
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  quantity  Int
+  unitPrice Float
+  subtotal  Float
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([saleId, productId])
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  saleId          String
+  sale            Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  storeId         String
+  store           Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  method          PaymentMethod
+  amount          Float
+  change          Float?
+  status          PaymentStatus @default(PAID)
+  transactionCode String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([saleId])
+}
+
+enum ExpenseStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Expense {
+  id          String        @id @default(cuid())
+  description String
+  category    String
+  amount      Float
+  dueDate     DateTime?
+  paidAt      DateTime?
+  status      ExpenseStatus @default(PENDING)
+  notes       String?
+  storeId     String
+  store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([storeId, status])
+  @@index([storeId, dueDate])
+}

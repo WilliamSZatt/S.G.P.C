@@ -63,7 +63,7 @@ router.get('/', async (request, response) => {
       orderBy: { createdAt: 'desc' },
       skip: (query.page - 1) * query.limit,
       take: query.limit,
-      include: { client: { select: { id: true, name: true } }, items: { include: { product: { select: { name: true } } } } }
+      include: { client: { select: { id: true, name: true } }, items: { include: { product: { select: { name: true } } } }, payments: true }
     }),
     prisma.sale.count({ where })
   ]);
@@ -73,7 +73,7 @@ router.get('/', async (request, response) => {
 router.get('/:id', async (request, response) => {
   const sale = await prisma.sale.findFirst({
     where: { id: request.params.id, storeId: request.auth!.storeId },
-    include: { client: true, items: { include: { product: true } }, user: { select: { id: true, name: true, email: true } } }
+    include: { client: true, items: { include: { product: true } }, payments: true, user: { select: { id: true, name: true, email: true } } }
   });
   if (!sale) {
     response.status(404).json({ message: 'Venda não encontrada.' });
@@ -149,6 +149,18 @@ router.post('/', async (request, response) => {
         items: { create: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity, unitPrice: line.product.price, subtotal: line.subtotal })) }
       },
       include: { items: { include: { product: { select: { id: true, name: true, sku: true } } } }, client: { select: { id: true, name: true } } }
+    });
+
+    await transaction.payment.create({
+      data: {
+        saleId: created.id,
+        storeId: request.auth!.storeId,
+        method: paymentMap[data.paymentMethod],
+        amount: total,
+        change: data.paymentMethod === 'dinheiro' ? (data.cashReceived ?? 0) - total : 0,
+        status: 'PAID',
+        paidAt: new Date()
+      }
     });
 
     for (const line of lines) {
